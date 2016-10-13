@@ -1,0 +1,24 @@
+
+buildscript {
+    repositories {
+        maven { url 'https://extranet.aoe.com/artifactory/remote-repos' }
+        maven { url 'https://extranet.aoe.com/artifactory/libs-release' }
+    }
+    dependencies {
+        classpath 'com.aoe.gradle:jenkins-job-dsl-gradle-plugin:1.2.0'
+    }
+}
+
+apply plugin: 'com.aoe.jenkins-job-dsl'
+
+repositories.clear()
+repositories.addAll(buildscript.repositories)
+
+dependencies {
+    jobDslExtension 'com.aoe.jenkins:scm-push-trigger:1.1.0@jar'
+}
+
+jobDsl {
+    sourceDir 'jobs'
+    resourceDir 'config'
+}
