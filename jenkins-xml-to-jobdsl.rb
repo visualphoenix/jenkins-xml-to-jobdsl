@@ -295,6 +295,7 @@ class ScmDefinitionNodeHandler < Struct.new(:node)
       GitScmDefinitionNodeHandler.new(node).process(job_name, currentDepth, indent)
     elsif node.attribute('class').value == 'hudson.scm.SubversionSCM'
       SvnScmDefinitionNodeHandler.new(node).process(job_name, currentDepth, indent)
+    elsif node.attribute('class').value == 'hudson.scm.NullSCM'
     else
       pp node
     end
@@ -327,7 +328,7 @@ class CpsDefinitionNodeHandler < Struct.new(:node)
     node.elements.each do |i|
       case i.name
       when 'script'
-        puts " " * currentDepth + "scriptPath(scriptpath = \"\"\"\n#{i.text}\n\"\"\"\n)"
+        puts " " * currentDepth + "scriptPath(scriptpath = \"\"\"\\\n#{i.text}\n\"\"\"\n)"
       when 'sandbox'
         puts " " * currentDepth + "sandbox(#{i.text})"
       else
@@ -369,9 +370,9 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
       case i.name
       when 'actions'
       when 'description'
-        puts " " * currentDepth + "description(desc = '#{i.text}')"
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
       when 'keepDependencies'
-        puts " " * currentDepth + "keepDependencies(keep = #{i.text})"
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'definition'
@@ -390,11 +391,44 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
   end
 end
 
+
+
+class TaskPropertiesHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    logText = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/logTexts/hudson.plugins.postbuildtask.LogProperties/logText')&.text
+    script = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/script')&.text
+    escalate = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/EscalateStatus')&.text
+    runIfSuccessful = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/RunIfJobSuccessful')&.text
+    puts " " * depth + "task('#{logText}',\"\"\"\\\n#{script}\n\"\"\",#{escalate},#{runIfSuccessful})"
+  end
+end
+
+class TasksNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    currentDepth = depth
+    node.elements.each do |i|
+      case i.name
+      when 'hudson.plugins.postbuildtask.TaskProperties'
+        TaskPropertiesHandler.new(i).process(job_name, currentDepth, indent)
+      else
+        pp i
+      end
+    end
+  end
+end
+
 class PostBuildTaskNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
-    puts " " * depth + "postBuildTask {"
+    puts " " * depth + "postbuildtask {"
     currentDepth = depth + indent
-    pp node
+    node.elements.each do |i|
+      case i.name
+      when 'tasks'
+        TasksNodeHandler.new(i).process(job_name, currentDepth, indent)
+      else
+        pp i
+      end
+    end
     puts " " * depth + "}"
   end
 end
@@ -439,6 +473,53 @@ class ArtifactNodeHandler < Struct.new(:node)
   end
 end
 
+class TriggerNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    projects = node.at_xpath('//configs/*/projects')&.text.split(',').map{|s|"'#{s}'"}.join(',')
+    puts " " * depth + "trigger([#{projects}]) {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'configs'
+        i.elements.each do |j|
+          case j.name
+          when 'hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig'
+            j.elements.each do |k|
+              case k.name
+              when 'configs', 'projects'
+                # intentionally ignored
+              when 'condition', 'triggerWithNoParameters'
+                puts " " * currentDepth + "#{k.name}('#{k.text}')"
+              else
+                pp k
+              end
+            end
+          else
+            pp j.name
+          end
+        end
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
+class BuildersNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    currentDepth = depth
+    node.elements.each do |i|
+      case i.name
+      when 'hudson.plugins.parameterizedtrigger.TriggerBuilder'
+        TriggerNodeHandler.new(i).process(job_name, currentDepth, indent)
+      else
+        pp i
+      end
+    end
+  end
+end
+
 class MavenDefinitionNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts "mavenJob('#{job_name}') {"
@@ -449,7 +530,7 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
            'aggregatorStyleBuild', 'ignoreUpstremChanges', 'processPlugins', 'mavenValidationLevel'
         # todo: not yet implemented
       when 'description'
-        puts " " * currentDepth + "description(desc = '#{i.text}')"
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'definition'
@@ -458,8 +539,8 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         TriggerDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'authToken'
         puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
-      when 'concurrentBuild', 'disabled', 'fingerprintingDisabled', 'keepDependencies', 'runHeadless',
-           'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled', 'incrementalBuild'
+      when 'keepDependencies', 'concurrentBuild', 'disabled', 'fingerprintingDisabled',
+           'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled', 'incrementalBuild'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'goals'
         GoalsNodeHandler.new(i).process(job_name, currentDepth, indent)
@@ -489,6 +570,9 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "#{i.name}(class: '#{i.attribute('class').value}')"
       when 'rootModule'
         ArtifactNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'runPostStepsIfResult'
+        puts " " * currentDepth + "postBuildSteps('#{i.at_xpath('//runPostStepsIfResult/name')&.text}') {"
+        puts " " * currentDepth + "}"
       else
         pp i
       end
@@ -496,6 +580,55 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
     puts "}"
   end
 end
+
+class FreestyleDefinitionNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts "freeStyleJob('#{job_name}') {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'actions', 'buildWrappers'
+        # todo: not yet implemented
+      when 'description'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+      when 'keepDependencies'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'properties'
+        PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'scm'
+        ScmDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'canRoam', 'assignedNode'
+        if i.name == 'canRoam' and i.text == 'true'
+          puts " " * currentDepth + "label()"
+        elsif i.name == 'assignedNode'
+          puts " " * currentDepth + "label('#{i.text}')"
+        end
+#      when 'keepDependencies', 'concurrentBuild', 'disabled', 'fingerprintingDisabled',
+#     'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled', 'incrementalBuild'
+      when 'disabled', 'concurrentBuild'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'blockBuildWhenDownstreamBuilding'
+        if i.text == 'true'
+          puts " " * currentDepth + "blockOnDownstreamProjects()"
+        end
+      when 'blockBuildWhenUpstreamBuilding'
+        if i.text == 'true'
+          puts " " * currentDepth + "blockOnUpstreamProjects()"
+        end
+      when 'triggers'
+        TriggerDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'publishers'
+        PublishersNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'builders'
+        BuildersNodeHandler.new(i).process(job_name, currentDepth, indent)
+      else
+        pp i
+      end
+    end
+    puts "}"
+  end
+end
+
 
 f = ARGV.shift
 if !File.file?(f)
@@ -515,7 +648,12 @@ Nokogiri::XML::Reader(File.open(f)).each do |node|
     MavenDefinitionNodeHandler.new(
       Nokogiri::XML(node.outer_xml).at('./maven2-moduleset')
     ).process(job, depth, indent)
+  elsif node.name == 'project' && node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT
+    FreestyleDefinitionNodeHandler.new(
+      Nokogiri::XML(node.outer_xml).at('./project')
+    ).process(job, depth, indent)
+  else
+    #pp node
   end
-  #pp node.name
 end
 
