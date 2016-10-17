@@ -1,8 +1,6 @@
 require 'nokogiri'
 require 'pp'
 
-
-
 class SvnScmLocationNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     currentDepth = depth + indent
@@ -37,8 +35,6 @@ class SvnScmLocationNodeHandler < Struct.new(:node)
     puts " " * depth + "}"
   end
 end
-
-
 
 class SvnScmDefinitionNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
@@ -91,8 +87,6 @@ class SvnScmDefinitionNodeHandler < Struct.new(:node)
   end
 end
 
-
-
 class MatrixAuthorizationNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "authorization {"
@@ -130,58 +124,98 @@ class RebuildNodeHandler < Struct.new(:node)
   end
 end
 
+class LogRotatorNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "logRotator {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'daysToKeep', 'numToKeep', 'artifactDaysToKeep', 'artifactNumToKeep'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
 class BuildDiscarderNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
+    currentDepth = depth
     node.elements.each do |i|
-     if i.attribute('class').value == 'hudson.tasks.LogRotator'
-       puts " " * depth + "logRotator {"
-       currentDepth = depth + indent
-       i.elements.each do |p|
-         case p.name
-         when 'daysToKeep', 'numToKeep', 'artifactDaysToKeep', 'artifactNumToKeep'
-            puts " " * currentDepth + "#{p.name}(#{p.text})"
-         else
-           pp p
-         end
-       end
-       puts " " * depth + "}"
+     if i.attribute('class')&.value == 'hudson.tasks.LogRotator'
+       LogRotatorNodeHandler.new(i).process(job_name, currentDepth, indent)
+     else
+       pp i
      end
     end
   end
 end
 
 class ParametersNodeHandler < Struct.new(:node)
+  def nvd(i)
+    name = ""
+    value = "null"
+    description = "null"
+    i.elements.each do |p|
+      case p.name
+      when "name"
+        name = "#{p.text}"
+      when "description"
+        if "#{p.text}" != "null"
+          description = "'#{p.text}'"
+        else
+          description = "null"
+        end
+      when "defaultValue"
+        value = "#{p.text}"
+        if "#{p.text}" != "null"
+          value = "'#{p.text}'"
+        else
+          value = "null"
+        end
+      when 'choices'
+        if p.attribute('class').value == 'java.util.Arrays$ArrayList'
+          value = "["
+          p.elements.each do |k|
+            case k.name
+            when 'a'
+              if k.attribute('class').value == 'string-array'
+                k.elements.each do |s|
+                  value += "'#{s.text}',"
+                end
+                value.chomp!(',')
+              end
+            else
+              pp k
+            end
+          end
+          value += "]"
+        else
+          pp p
+        end
+      else
+        pp p
+      end
+    end
+    return name, value, description
+  end
+
   def process(job_name, depth, indent)
     puts " " * depth + "parameters {"
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
       when 'hudson.model.StringParameterDefinition'
-        name = ""
-        value = "null"
-        description = "null"
-        i.elements.each do |p|
-          case p.name
-          when "name"
-            name = "#{p.text}"
-          when "description"
-            if "#{p.text}" != "null"
-              description = "'#{p.text}'"
-            else
-              description = "null"
-            end
-          when "defaultValue"
-            value = "#{p.text}"
-            if "#{p.text}" != "null"
-              value = "'#{p.text}'"
-            else
-              value = "null"
-            end
-          else
-            pp p
-          end
-        end
-        puts " " * currentDepth + "stringParam(parametername = '#{name}', defaultvalue = #{value}, description = #{description})"
+        name, value, description = nvd(i)
+        puts " " * currentDepth + "stringParam('#{name}', #{value}, #{description})"
+      when 'hudson.model.BooleanParameterDefinition'
+        name, value, description = nvd(i)
+        puts " " * currentDepth + "booleanParam('#{name}', #{value}, #{description})"
+      when 'hudson.model.ChoiceParameterDefinition'
+        name, value, description = nvd(i)
+        puts " " * currentDepth + "choiceParam('#{name}', #{value}, #{description})"
       else
         pp i
       end
@@ -275,6 +309,14 @@ class GitScmDefinitionNodeHandler < Struct.new(:node)
           else
           end
         end
+      when 'browser'
+        puts " " * currentDepth + "browser {"
+        if i.attribute('class').value == 'hudson.plugins.git.browser.Stash'
+          puts " " * (currentDepth + indent) + "stash('#{i.at_xpath('//browser/url')&.text}')"
+        else
+          pp i
+        end
+        puts " " * currentDepth + "}"
       when 'doGenerateSubmoduleConfigurations', 'submoduleCfg', 'configVersion'
         # todo: not yet implemented
       when 'extensions'
@@ -370,8 +412,10 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
       case i.name
       when 'actions'
       when 'description'
-        puts " " * currentDepth + "#{i.name}('#{i.text}')"
-      when 'keepDependencies'
+        if !(i.text.nil? || i.text.empty?)
+          puts " " * currentDepth + "#{i.name}('#{i.text}')"
+        end
+      when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
@@ -383,6 +427,8 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
       when 'concurrentBuild'
         puts " " * currentDepth + "concurrentBuild(allowconcurrentbuild = #{i.text})"
+      when 'logRotator'
+        LogRotatorNodeHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
@@ -433,6 +479,109 @@ class PostBuildTaskNodeHandler < Struct.new(:node)
   end
 end
 
+class ArchiverNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "archiveArtifacts {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'artifacts'
+        puts " " * currentDepth + "pattern('#{i.text}')"
+      when 'allowEmptyArchive'
+        puts " " * currentDepth + "allowEmpty(#{i.text})"
+      when 'onlyIfSuccessful', 'fingerprint', 'defaultExcludes'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'caseSensitive'
+        #unsupported
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
+class SonarNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "sonar {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'branch'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+      when 'mavenOpts', 'jobAdditionalProperties', 'settings', 'globalSettings', 'usePrivateRepository'
+        # unsupported
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
+class ExtendedEmailNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "extendedEmail {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'saveOutput'
+        puts " " * currentDepth + "saveToWorkspace(#{i.text})"
+      when 'replyTo'
+        puts " " * currentDepth + "replyToList('#{i.text}')"
+      when 'recipientList', 'contentType', 'defaultSubject', 'presendScript'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+      when 'defaultContent'
+        puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+      when 'attachBuildLog', 'compressBuildLog', 'disabled'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'attachmentsPattern'
+        # unsupported
+      when 'configuredTriggers'
+        puts " " * currentDepth + "triggers {"
+        i.elements.each do |j|
+          case j.name
+          when 'hudson.plugins.emailext.plugins.trigger.SuccessTrigger'
+            puts " " * (currentDepth + indent) + "success {"
+            j.elements.each do |k|
+              case k.name
+              when 'email'
+                k.elements.each do |e|
+                  case e.name
+                  when 'attachmentsPattern'
+                    puts " " * (currentDepth + indent * 2) + "attachmentPattern('#{e.text}')"
+                  when 'subject', 'recipientList', 'contentType'
+                    puts " " * (currentDepth + indent * 2) + "#{e.name}('#{e.text}')"
+                  when 'replyTo'
+                    puts " " * (currentDepth + indent * 2) + "replyToList('#{e.text}')"
+                  when 'compressBuildLog', 'attachBuildLog'
+                    puts " " * (currentDepth + indent * 2) + "#{e.name}(#{e.text})"
+                  when 'recipientProviders'
+                    # unsupported
+                  when 'body'
+                    puts " " * (currentDepth + indent * 2) + "content('''\\\n#{e.text}\n''')"
+                  else
+                    pp e
+                  end
+                end
+              else
+                pp k
+              end
+            end
+            puts " " * (currentDepth + indent) + "}"
+          else
+            pp j
+          end
+        end
+        puts " " * currentDepth + "}"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
 class PublishersNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "publishers {"
@@ -441,6 +590,18 @@ class PublishersNodeHandler < Struct.new(:node)
       case i.name
       when 'hudson.plugins.postbuildtask.PostbuildTask'
         PostBuildTaskNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.tasks.ArtifactArchiver'
+        ArchiverNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'org.jenkinsci.plugins.stashNotifier.StashNotifier'
+        puts " " * currentDepth + "stashNotifier()"
+      when 'hudson.plugins.sonar.SonarPublisher'
+        SonarNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.plugins.emailext.ExtendedEmailPublisher'
+        ExtendedEmailNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.tasks.BuildTrigger'
+        projects = "['#{i.at_xpath('//hudson.tasks.BuildTrigger/childProjects')&.text}']"
+        threshold = "'#{i.at_xpath('//hudson.tasks.BuildTrigger/threshold/name')&.text}'"
+        puts " " * currentDepth + "downstream(#{projects}, #{threshold})"
       else
         pp i
       end
@@ -473,6 +634,33 @@ class ArtifactNodeHandler < Struct.new(:node)
   end
 end
 
+class BlockNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "block {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'buildStepFailureThreshold', 'unstableThreshold', 'failureThreshold'
+        puts " " * currentDepth + "#{i.name} {"
+        i.elements.each do |j|
+          case j.name
+          when 'name', 'color'
+            puts " " * (currentDepth + indent) + "#{j.name}('#{j.text}')"
+          when 'ordinal', 'completeBuild'
+            puts " " * (currentDepth + indent) + "#{j.name}(#{j.text})"
+          else
+              pp j
+          end
+        end
+        puts " " * currentDepth + "}"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
 class TriggerNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     projects = node.at_xpath('//configs/*/projects')&.text.split(',').map{|s|"'#{s}'"}.join(',')
@@ -488,8 +676,14 @@ class TriggerNodeHandler < Struct.new(:node)
               case k.name
               when 'configs', 'projects'
                 # intentionally ignored
-              when 'condition', 'triggerWithNoParameters'
+              when 'condition'
                 puts " " * currentDepth + "#{k.name}('#{k.text}')"
+              when 'triggerWithNoParameters', 'buildAllNodesWithLabel'
+                puts " " * currentDepth + "#{k.name}(#{k.text})"
+              when 'block'
+                puts " " * currentDepth + "configs {"
+                BlockNodeHandler.new(k).process(job_name, currentDepth + indent, indent)
+                puts " " * currentDepth + "}"
               else
                 pp k
               end
@@ -513,6 +707,10 @@ class BuildersNodeHandler < Struct.new(:node)
       case i.name
       when 'hudson.plugins.parameterizedtrigger.TriggerBuilder'
         TriggerNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.tasks.Shell'
+        puts " " * currentDepth + "step {"
+        puts " " * (currentDepth + indent) + "shell('''\\\n#{i.at_xpath('//hudson.tasks.Shell/command')&.text}\n''')"
+        puts " " * currentDepth + "}"
       else
         pp i
       end
@@ -540,7 +738,8 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
       when 'authToken'
         puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
       when 'keepDependencies', 'concurrentBuild', 'disabled', 'fingerprintingDisabled',
-           'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled', 'incrementalBuild'
+           'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled',
+           'incrementalBuild', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'goals'
         GoalsNodeHandler.new(i).process(job_name, currentDepth, indent)
@@ -591,7 +790,7 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
         # todo: not yet implemented
       when 'description'
         puts " " * currentDepth + "#{i.name}('#{i.text}')"
-      when 'keepDependencies'
+      when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
