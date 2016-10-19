@@ -1,5 +1,6 @@
 require 'nokogiri'
 require 'pp'
+require 'optparse'
 
 class SvnScmLocationNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
@@ -828,16 +829,29 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
   end
 end
 
+depth = 0
+indent = 4
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: ruby jenkins-xml-to-jobdsl.rb [OPTIONS] path/to/config.xml"
+
+  opts.on(
+    "-i indentation_level",
+    "--indent=indentation_level",
+    "Indentation level (default 4)",
+  ) do |indentation_level|
+    indent = indentation_level.to_i || 4
+  end
+end.parse!
 
 f = ARGV.shift
 if !File.file?(f)
   exit 1
 end
+
 f = File.absolute_path(f)
 d = File.dirname(f)
 job = d.split("/")[-1]
-depth = 0
-indent = 4
 Nokogiri::XML::Reader(File.open(f)).each do |node|
   if node.name == 'flow-definition' && node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT
     FlowDefinitionNodeHandler.new(
