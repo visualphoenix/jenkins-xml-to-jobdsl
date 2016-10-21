@@ -164,14 +164,14 @@ class ParametersNodeHandler < Struct.new(:node)
       when "name"
         name = "#{p.text}"
       when "description"
-        if "#{p.text}" != "null"
+        if (!p.text.to_s.strip.empty? && "#{p.text}" != "null")
           description = "'#{p.text}'"
         else
           description = "null"
         end
       when "defaultValue"
         value = "#{p.text}"
-        if "#{p.text}" != "null"
+        if (!p.text.to_s.strip.empty? && "#{p.text}" != "null")
           value = "'#{p.text}'"
         else
           value = "null"
@@ -414,7 +414,7 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
       when 'actions'
       when 'description'
         if !(i.text.nil? || i.text.empty?)
-          puts " " * currentDepth + "#{i.name}('#{i.text}')"
+          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
         end
       when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
@@ -425,9 +425,9 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
       when 'triggers'
         TriggerDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'authToken'
-        puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
+        puts " " * currentDepth + "authenticationToken('#{i.text}')"
       when 'concurrentBuild'
-        puts " " * currentDepth + "concurrentBuild(allowconcurrentbuild = #{i.text})"
+        puts " " * currentDepth + "concurrentBuild(#{i.text})"
       when 'logRotator'
         LogRotatorNodeHandler.new(i).process(job_name, currentDepth, indent)
       else
@@ -729,7 +729,9 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
            'aggregatorStyleBuild', 'ignoreUpstremChanges', 'processPlugins', 'mavenValidationLevel'
         # todo: not yet implemented
       when 'description'
-        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+        if !(i.text.nil? || i.text.empty?)
+          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+        end
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'definition'
@@ -790,7 +792,9 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
       when 'actions', 'buildWrappers'
         # todo: not yet implemented
       when 'description'
-        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+        if !(i.text.nil? || i.text.empty?)
+          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+        end
       when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
       when 'properties'

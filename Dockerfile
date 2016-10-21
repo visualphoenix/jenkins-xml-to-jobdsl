@@ -37,3 +37,21 @@ RUN true \
  && gradle :job-dsl-core:oneJar
 
 ENV DSL_JAR "/jdsl/job-dsl-core/build/libs/job-dsl-core-*-standalone.jar"
+
+ENV APP_HOME /app
+ENV HOME /root
+RUN mkdir $APP_HOME
+WORKDIR $APP_HOME
+COPY Gemfile* $APP_HOME/
+RUN bundle config --global silence_root_warning 1 \
+ && bundle install
+
+# Upload source
+COPY . $APP_HOME
+
+# Start server
+ENV PORT 3000
+EXPOSE 3000
+
+VOLUME ["/var/www/uploads"]
+CMD ["ruby", "server.rb"]
