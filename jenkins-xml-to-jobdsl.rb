@@ -652,19 +652,12 @@ class BlockNodeHandler < Struct.new(:node)
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
-      when 'buildStepFailureThreshold', 'unstableThreshold', 'failureThreshold'
-        puts " " * currentDepth + "#{i.name} {"
-        i.elements.each do |j|
-          case j.name
-          when 'name', 'color'
-            puts " " * (currentDepth + indent) + "#{j.name}('#{j.text}')"
-          when 'ordinal', 'completeBuild'
-            puts " " * (currentDepth + indent) + "#{j.name}(#{j.text})"
-          else
-              pp j
-          end
-        end
-        puts " " * currentDepth + "}"
+      when 'buildStepFailureThreshold'
+        puts " " * currentDepth + "buildStepFailure('#{i.at_xpath('//buildStepFailureThreshold/name')&.text}')"
+      when 'unstableThreshold'
+        puts " " * currentDepth + "unstable('#{i.at_xpath('//unstableThreshold/name')&.text}')"
+      when 'failureThreshold'
+        puts " " * currentDepth + "failure('#{i.at_xpath('//failureThreshold/name')&.text}')"
       else
         pp i
       end
@@ -689,13 +682,11 @@ class TriggerNodeHandler < Struct.new(:node)
               when 'configs', 'projects'
                 # intentionally ignored
               when 'condition'
-                puts " " * currentDepth + "#{k.name}('#{k.text}')"
+                #puts " " * currentDepth + "#{k.name}('#{k.text}')"
               when 'triggerWithNoParameters', 'buildAllNodesWithLabel'
-                puts " " * currentDepth + "#{k.name}(#{k.text})"
+                #puts " " * currentDepth + "#{k.name}(#{k.text})"
               when 'block'
-                puts " " * currentDepth + "configs {"
-                BlockNodeHandler.new(k).process(job_name, currentDepth + indent, indent)
-                puts " " * currentDepth + "}"
+                BlockNodeHandler.new(k).process(job_name, currentDepth, indent)
               else
                 pp k
               end
@@ -718,7 +709,11 @@ class BuildersNodeHandler < Struct.new(:node)
     node.elements.each do |i|
       case i.name
       when 'hudson.plugins.parameterizedtrigger.TriggerBuilder'
-        TriggerNodeHandler.new(i).process(job_name, currentDepth, indent)
+        puts " " * currentDepth + "steps {"
+        puts " " * (currentDepth + indent) + "downstreamParameterized {"
+        TriggerNodeHandler.new(i).process(job_name, currentDepth + indent * 2, indent)
+        puts " " * (currentDepth + indent) + "}"
+        puts " " * currentDepth + "}"
       when 'hudson.tasks.Shell'
         puts " " * currentDepth + "step {"
         puts " " * (currentDepth + indent) + "shell('''\\\n#{i.at_xpath('//hudson.tasks.Shell/command')&.text}\n''')"
