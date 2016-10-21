@@ -16,7 +16,7 @@ class SvnScmLocationNodeHandler < Struct.new(:node)
         pp i
       end
     end
-    puts " " * depth + "locations('#{svnurl}') {"
+    puts " " * depth + "location('#{svnurl}') {"
     node.elements.each do |i|
       case i.name
       when 'remote'
@@ -24,7 +24,7 @@ class SvnScmLocationNodeHandler < Struct.new(:node)
       when 'credentialsId'
           puts " " * currentDepth + "credentials('#{i.text}')"
       when 'depthOption'
-          puts " " * currentDepth + "depth(javaposse.jobdsl.dsl.helpers.scm.#{i.text.upcase})"
+          puts " " * currentDepth + "depth(javaposse.jobdsl.dsl.helpers.scm.SvnDepth.#{i.text.upcase})"
       when 'local'
           puts " " * currentDepth + "directory('#{i.text}')"
       when 'ignoreExternalsOption'
@@ -64,7 +64,7 @@ class SvnScmDefinitionNodeHandler < Struct.new(:node)
       when 'excludedRevprop'
           puts " " * currentDepth + "excludedRevisionProperty('#{i.text}')"
       when 'workspaceUpdater'
-          strategy = 'javaposse.jobdsl.dsl.helpers.scm.'
+          strategy = 'javaposse.jobdsl.dsl.helpers.scm.SvnCheckoutStrategy.'
           case i.attribute('class').value
           when 'hudson.scm.subversion.UpdateUpdater'
             strategy += 'UPDATE'
@@ -366,7 +366,7 @@ class CpsScmDefinitionNodeHandler < Struct.new(:node)
       when 'scm'
         ScmDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'scriptPath'
-        puts " " * currentDepth + "scriptPath(scriptpath = '#{i.text}')"
+        puts " " * currentDepth + "scriptPath('#{i.text}')"
       else
         pp i
       end
@@ -382,7 +382,7 @@ class CpsDefinitionNodeHandler < Struct.new(:node)
     node.elements.each do |i|
       case i.name
       when 'script'
-        puts " " * currentDepth + "scriptPath(scriptpath = \"\"\"\\\n#{i.text}\n\"\"\"\n)"
+        puts " " * currentDepth + "script('''\\\n#{i.text}\n\'''\n)"
       when 'sandbox'
         puts " " * currentDepth + "sandbox(#{i.text})"
       else
@@ -453,11 +453,11 @@ end
 
 class TaskPropertiesHandler < Struct.new(:node)
   def process(job_name, depth, indent)
-    logText = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/logTexts/hudson.plugins.postbuildtask.LogProperties/logText')&.text
+    logText = "#{node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/logTexts/hudson.plugins.postbuildtask.LogProperties/logText')&.text}"
     script = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/script')&.text
     escalate = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/EscalateStatus')&.text
     runIfSuccessful = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/RunIfJobSuccessful')&.text
-    puts " " * depth + "task('#{logText}',\"\"\"\\\n#{script}\n\"\"\",#{escalate},#{runIfSuccessful})"
+    puts " " * depth + "task('#{logText.to_s.empty? ? ".*" : logText}','''\\\n#{script}\n''',#{escalate},#{runIfSuccessful})"
   end
 end
 
@@ -477,7 +477,7 @@ end
 
 class PostBuildTaskNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
-    puts " " * depth + "postbuildtask {"
+    puts " " * depth + "postBuildTask {"
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
@@ -780,9 +780,9 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
       when 'blockTriggerWhenBuilding'
         # todo: do this when jobdsl supports it
       when 'settings', 'globalSettings'
-        puts " " * currentDepth + "#{i.name}(class: '#{i.attribute('class').value}')"
+        # todo: is this necessary?
       when 'rootModule'
-        ArtifactNodeHandler.new(i).process(job_name, currentDepth, indent)
+        # todo: is this necessary?
       when 'runPostStepsIfResult'
         puts " " * currentDepth + "postBuildSteps('#{i.at_xpath('//runPostStepsIfResult/name')&.text}') {"
         puts " " * currentDepth + "}"
