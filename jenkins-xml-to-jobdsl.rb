@@ -204,29 +204,33 @@ class ParametersNodeHandler < Struct.new(:node)
   end
 
   def process(job_name, depth, indent)
-    puts " " * depth + "parameters {"
+    param_block = []
+    param_block << " " * depth + "parameters {"
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
       when 'hudson.model.StringParameterDefinition'
         name, value, description = nvd(i)
-        puts " " * currentDepth + "stringParam('#{name}', #{value}, #{description})"
+        param_block << " " * currentDepth + "stringParam('#{name}', #{value}, #{description})"
       when 'hudson.model.BooleanParameterDefinition'
         name, value, description = nvd(i)
-        puts " " * currentDepth + "booleanParam('#{name}', #{value}, #{description})"
+        param_block << " " * currentDepth + "booleanParam('#{name}', #{value}, #{description})"
       when 'hudson.model.ChoiceParameterDefinition'
         name, value, description = nvd(i)
-        puts " " * currentDepth + "choiceParam('#{name}', #{value}, #{description})"
+        param_block << " " * currentDepth + "choiceParam('#{name}', #{value}, #{description})"
       else
-        pp i
+        param_block << "#{pp i}"
       end
     end
-    puts " " * depth + "}"
+    param_block << " " * depth + "}"
+    return param_block
   end
 end
 
 class PropertiesNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
+    # hack... need to print parameter block outside of property block. :(
+    parameter_node_block = nil
     puts " " * depth + "properties {"
     currentDepth = depth + indent
     node.elements.each do |i|
@@ -241,7 +245,9 @@ class PropertiesNodeHandler < Struct.new(:node)
         i.elements.each do |p|
           case p.name
           when 'parameterDefinitions'
-            ParametersNodeHandler.new(p).process(job_name, currentDepth, indent)
+            # hack... should really be nested under properties {} but jobdsl doesnt support this yet
+            # parameter_node_block = ParametersNodeHandler.new(p).process(job_name, currentDepth, indent)
+            parameter_node_block = ParametersNodeHandler.new(p).process(job_name, depth, indent)
           else
             pp p
           end
@@ -253,6 +259,11 @@ class PropertiesNodeHandler < Struct.new(:node)
       end
     end
     puts " " * depth + "}"
+    if parameter_node_block
+      parameter_node_block.each do |i|
+        puts "#{i}"
+      end
+    end
   end
 end
 
@@ -301,11 +312,11 @@ class GitScmDefinitionNodeHandler < Struct.new(:node)
         i.elements.each do |j|
           case j.name
           when 'hudson.plugins.git.BranchSpec'
-            branches = "["
+            branches = ""
             j.elements.each do |b|
               branches += "'#{b.text}',"
             end
-            branches[-1] = "]"
+            branches[-1] = ""
             puts " " * currentDepth + "branches(#{branches})"
           else
           end
