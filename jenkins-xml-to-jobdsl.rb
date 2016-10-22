@@ -171,7 +171,9 @@ class ParametersNodeHandler < Struct.new(:node)
         end
       when "defaultValue"
         value = "#{p.text}"
-        if (!p.text.to_s.strip.empty? && "#{p.text}" != "null")
+        if (!p.text.to_s.strip.empty? && ("#{p.text}" == "true" || "#{p.text}" == "false"))
+          value = "#{p.text}"
+        elsif (!p.text.to_s.strip.empty? && "#{p.text}" != "null")
           value = "'#{p.text}'"
         else
           value = "null"
@@ -382,7 +384,8 @@ class CpsDefinitionNodeHandler < Struct.new(:node)
     node.elements.each do |i|
       case i.name
       when 'script'
-        puts " " * currentDepth + "script('''\\\n#{i.text}\n\'''\n)"
+        txt = i.text.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
+        puts " " * currentDepth + "script('''\\\n#{txt}\n\'''\n)"
       when 'sandbox'
         puts " " * currentDepth + "sandbox(#{i.text})"
       else
