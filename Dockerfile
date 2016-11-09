@@ -1,6 +1,6 @@
 FROM ubuntu:latest
 
-MAINTAINER Ryan Grothouse <rgrothouse@gmail.com>
+MAINTAINER Raymond Barbiero <raymond.barbiero.dev@gmail.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV NOKOGIRI_USE_SYSTEM_LIBRARIES 1
