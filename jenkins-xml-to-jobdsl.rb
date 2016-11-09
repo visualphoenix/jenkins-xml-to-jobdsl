@@ -165,7 +165,7 @@ class ParametersNodeHandler < Struct.new(:node)
         name = "#{p.text}"
       when "description"
         if (!p.text.to_s.strip.empty? && "#{p.text}" != "null")
-          description = "'#{p.text}'"
+          description = "'''#{p.text}'''"
         else
           description = "null"
         end
@@ -458,9 +458,10 @@ class TaskPropertiesHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     logText = "#{node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/logTexts/hudson.plugins.postbuildtask.LogProperties/logText')&.text}"
     script = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/script')&.text
+    script = script.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
     escalate = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/EscalateStatus')&.text
     runIfSuccessful = node.at_xpath('//hudson.plugins.postbuildtask.TaskProperties/RunIfJobSuccessful')&.text
-    puts " " * depth + "task('#{logText.to_s.empty? ? ".*" : logText}','''\\\n#{script}\n''',#{escalate},#{runIfSuccessful})"
+    puts " " * depth + "task('#{logText.to_s.empty? ? ".*" : logText.delete!("\C-M")}','''\\\n#{script.delete!("\C-M")}\n''',#{escalate},#{runIfSuccessful})"
   end
 end
 
@@ -544,7 +545,9 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "saveToWorkspace(#{i.text})"
       when 'replyTo'
         puts " " * currentDepth + "replyToList('#{i.text}')"
-      when 'recipientList', 'contentType', 'defaultSubject', 'presendScript'
+      when 'presendScript'
+        puts " " * currentDepth + "preSendScript('#{i.text}')"
+      when 'recipientList', 'contentType', 'defaultSubject'
         puts " " * currentDepth + "#{i.name}('#{i.text}')"
       when 'defaultContent'
         puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
@@ -564,14 +567,18 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
                 k.elements.each do |e|
                   case e.name
                   when 'attachmentsPattern'
-                    puts " " * (currentDepth + indent * 2) + "attachmentPattern('#{e.text}')"
-                  when 'subject', 'recipientList', 'contentType'
-                    puts " " * (currentDepth + indent * 2) + "#{e.name}('#{e.text}')"
+	            if !(e.text.nil? || e.text.empty?)
+                      puts " " * (currentDepth + indent * 2) + "attachmentPatterns('#{e.text}')"
+		    end
+                  when 'subject', 'recipientList'
+	            if !(e.text.nil? || e.text.empty?)
+                      puts " " * (currentDepth + indent * 2) + "#{e.name}('#{e.text}')"
+		    end
                   when 'replyTo'
                     puts " " * (currentDepth + indent * 2) + "replyToList('#{e.text}')"
                   when 'compressBuildLog', 'attachBuildLog'
                     puts " " * (currentDepth + indent * 2) + "#{e.name}(#{e.text})"
-                  when 'recipientProviders'
+                  when 'recipientProviders', 'contentType'
                     # unsupported
                   when 'body'
                     puts " " * (currentDepth + indent * 2) + "content('''\\\n#{e.text}\n''')"
@@ -718,8 +725,10 @@ class BuildersNodeHandler < Struct.new(:node)
         puts " " * (currentDepth + indent) + "}"
         puts " " * currentDepth + "}"
       when 'hudson.tasks.Shell'
-        puts " " * currentDepth + "step {"
-        puts " " * (currentDepth + indent) + "shell('''\\\n#{i.at_xpath('//hudson.tasks.Shell/command')&.text}\n''')"
+        puts " " * currentDepth + "steps {"
+	txt = i.at_xpath('//hudson.tasks.Shell/command')&.text
+        txt = txt&.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
+        puts " " * (currentDepth + indent) + "shell('''\\\n#{txt}\n''')"
         puts " " * currentDepth + "}"
       else
         pp i
@@ -749,6 +758,8 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         TriggerDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'authToken'
         puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
+      when 'mavenOpts'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
       when 'keepDependencies', 'concurrentBuild', 'disabled', 'fingerprintingDisabled',
            'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled',
            'incrementalBuild', 'quietPeriod'
