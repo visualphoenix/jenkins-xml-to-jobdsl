@@ -27,3 +27,15 @@ Upload a job for translation:
       -F file=@"$PWD/tests/pipeline-example/config.xml" \
       -F name='pipeline-example' \
       http://localhost:3000
+
+Or as a function:
+
+    function jenkins-translate () {
+      job=$(basename $(dirname $1))
+      dir=$(cd $(dirname $1) && pwd)
+      file=$(basename $1)
+      curl \
+        -F file=@"${dir}/${file}" \
+        -F name="${job}" \
+        http://localhost:3000
+    }

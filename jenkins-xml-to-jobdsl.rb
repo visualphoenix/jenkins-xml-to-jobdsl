@@ -211,6 +211,9 @@ class ParametersNodeHandler < Struct.new(:node)
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
+      when 'hudson.model.TextParameterDefinition'
+        name, value, description = nvd(i)
+        param_block << " " * currentDepth + "textParam('#{name}', #{value}, #{description})"
       when 'hudson.model.StringParameterDefinition'
         name, value, description = nvd(i)
         param_block << " " * currentDepth + "stringParam('#{name}', #{value}, #{description})"
@@ -535,7 +538,60 @@ class SonarNodeHandler < Struct.new(:node)
   end
 end
 
+class IrcPublisherNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "irc {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'strategy'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+      when 'notifyUpstreamCommitters'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'notifyFixers'
+	puts " " * currentDepth + "notifyScmFixers(#{i.text})"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
+
 class ExtendedEmailNodeHandler < Struct.new(:node)
+  def print_trigger_block(j, currentDepth, indent)
+    j.elements.each do |k|
+      case k.name
+      when 'email'
+        k.elements.each do |e|
+          case e.name
+          when 'attachmentsPattern'
+            if !(e.text.nil? || e.text.empty?)
+              puts " " * (currentDepth + indent * 2) + "attachmentPatterns('#{e.text}')"
+            end
+          when 'subject', 'recipientList'
+            if !(e.text.nil? || e.text.empty?)
+              puts " " * (currentDepth + indent * 2) + "#{e.name}('#{e.text}')"
+            end
+          when 'replyTo'
+            puts " " * (currentDepth + indent * 2) + "replyToList('#{e.text}')"
+          when 'compressBuildLog', 'attachBuildLog'
+            puts " " * (currentDepth + indent * 2) + "#{e.name}(#{e.text})"
+          when 'recipientProviders', 'contentType'
+            # unsupported
+          when 'body'
+            puts " " * (currentDepth + indent * 2) + "content('''\\\n#{e.text}\n''')"
+          else
+            pp e
+          end
+        end
+      else
+        pp k
+      end
+    end
+  end
+
   def process(job_name, depth, indent)
     puts " " * depth + "extendedEmail {"
     currentDepth = depth + indent
@@ -559,37 +615,13 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "triggers {"
         i.elements.each do |j|
           case j.name
+          when 'hudson.plugins.emailext.plugins.trigger.FailureTrigger'
+            puts " " * (currentDepth + indent) + "failure {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
           when 'hudson.plugins.emailext.plugins.trigger.SuccessTrigger'
             puts " " * (currentDepth + indent) + "success {"
-            j.elements.each do |k|
-              case k.name
-              when 'email'
-                k.elements.each do |e|
-                  case e.name
-                  when 'attachmentsPattern'
-	            if !(e.text.nil? || e.text.empty?)
-                      puts " " * (currentDepth + indent * 2) + "attachmentPatterns('#{e.text}')"
-		    end
-                  when 'subject', 'recipientList'
-	            if !(e.text.nil? || e.text.empty?)
-                      puts " " * (currentDepth + indent * 2) + "#{e.name}('#{e.text}')"
-		    end
-                  when 'replyTo'
-                    puts " " * (currentDepth + indent * 2) + "replyToList('#{e.text}')"
-                  when 'compressBuildLog', 'attachBuildLog'
-                    puts " " * (currentDepth + indent * 2) + "#{e.name}(#{e.text})"
-                  when 'recipientProviders', 'contentType'
-                    # unsupported
-                  when 'body'
-                    puts " " * (currentDepth + indent * 2) + "content('''\\\n#{e.text}\n''')"
-                  else
-                    pp e
-                  end
-                end
-              else
-                pp k
-              end
-            end
+            print_trigger_block(j, currentDepth, indent)
             puts " " * (currentDepth + indent) + "}"
           else
             pp j
@@ -620,10 +652,36 @@ class PublishersNodeHandler < Struct.new(:node)
         SonarNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.plugins.emailext.ExtendedEmailPublisher'
         ExtendedEmailNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.plugins.ircbot.IrcPublisher'
+	IrcPublisherNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.tasks.BuildTrigger'
         projects = "['#{i.at_xpath('//hudson.tasks.BuildTrigger/childProjects')&.text}']"
         threshold = "'#{i.at_xpath('//hudson.tasks.BuildTrigger/threshold/name')&.text}'"
         puts " " * currentDepth + "downstream(#{projects}, #{threshold})"
+      when 'hudson.plugins.performance.PerformancePublisher'
+        puts " " * currentDepth + "configure { publishers ->"
+        PerformancePublisherNodeHandler.new(i).process(job_name, currentDepth+indent, indent)
+        puts " " * currentDepth + "}"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+end
+
+
+class PerformancePublisherNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "publishers << 'hudson.plugins.performance.PerformancePublisher' {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'errorFailedThreshold', 'errorUnstableThreshold', 'relativeFailedThresholdPositive',
+           'relativeFailedThresholdNegative', 'relativeUnstableThresholdPositive', 'relativeUnstableThresholdNegative',
+           'nthBuildNumber', 'configType', 'modeOfThreshold', 'compareBuildPrevious', 'modePerformancePerTestCase',
+           'errorUnstableResponseTimeThreshold', 'modeRelativeThresholds'
+        puts " " * currentDepth + "#{i.name} '#{i.text}'"
       else
         pp i
       end
@@ -845,6 +903,8 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
         PublishersNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'builders'
         BuildersNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'logRotator'
+        LogRotatorNodeHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
