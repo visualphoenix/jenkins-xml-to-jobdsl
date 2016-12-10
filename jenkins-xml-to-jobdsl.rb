@@ -538,22 +538,69 @@ class SonarNodeHandler < Struct.new(:node)
   end
 end
 
-class IrcPublisherNodeHandler < Struct.new(:node)
+class IrcTargetsNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
-    puts " " * depth + "irc {"
-    currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
-      when 'strategy'
-        puts " " * currentDepth + "#{i.name}('#{i.text}')"
-      when 'notifyUpstreamCommitters'
-        puts " " * currentDepth + "#{i.name}(#{i.text})"
-      when 'notifyFixers'
-	puts " " * currentDepth + "notifyScmFixers(#{i.text})"
+      when 'hudson.plugins.im.GroupChatIMMessageTarget'
+        params = i.elements.collect {|e|
+          "#{e.name}: #{formatText e.text}"
+        }.join ', '
+        puts " " * depth + "channel(#{params})"
       else
         pp i
       end
     end
+  end
+
+  def formatText(str)
+    if str =~ /false|true/
+      str == 'true'
+    else
+      "'#{str}'"
+    end
+  end
+end
+
+class IrcPublisherNodeHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "irc {"
+    currentDepth = depth + indent
+    configureBlock = []
+    node.elements.each do |i|
+      case i.name
+      when 'targets'
+        IrcTargetsNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'strategy'
+        puts " " * currentDepth + "#{i.name}('#{i.text}')"
+      when 'notifyUpstreamCommitters'
+        puts " " * currentDepth + "#{i.name}(#{i.text})"
+      when 'notifySuspects'
+        puts " " * currentDepth + "notifyScmCommitters(#{i.text})"
+      when 'notifyFixers'
+        puts " " * currentDepth + "notifyScmFixers(#{i.text})"
+      when 'notifyCulprits'
+        puts " " * currentDepth + "notifyScmCulprits(#{i.text})"
+      when 'notifyOnBuildStart'
+        configureBlock << "#{i.name}(#{i.text})"
+      when 'buildToChatNotifier'
+        attrs = i.attributes
+        configureBlock << "#{i.name}(class: '#{attrs['class'].text}', plugin: '#{attrs['plugin'].text}')"
+      when 'matrixMultiplier'
+        configureBlock << "#{i.name}('#{i.text}')"
+      else
+        pp i
+      end
+    end
+
+    unless configureBlock.empty?
+      puts " " * currentDepth + "configure { node ->"
+      configureBlock.each do |e|
+        puts " " * (currentDepth + depth) + e
+      end
+      puts " " * currentDepth + "}"
+    end
+
     puts " " * depth + "}"
   end
 end
@@ -653,7 +700,7 @@ class PublishersNodeHandler < Struct.new(:node)
       when 'hudson.plugins.emailext.ExtendedEmailPublisher'
         ExtendedEmailNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.plugins.ircbot.IrcPublisher'
-	IrcPublisherNodeHandler.new(i).process(job_name, currentDepth, indent)
+        IrcPublisherNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.tasks.BuildTrigger'
         projects = "['#{i.at_xpath('//hudson.tasks.BuildTrigger/childProjects')&.text}']"
         threshold = "'#{i.at_xpath('//hudson.tasks.BuildTrigger/threshold/name')&.text}'"
