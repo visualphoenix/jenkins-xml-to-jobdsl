@@ -211,6 +211,8 @@ class ParametersNodeHandler < Struct.new(:node)
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
+      when 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition'
+        # these cannot be defined in this scope. Have to be defined on /properties.
       when 'hudson.model.TextParameterDefinition'
         name, value, description = nvd(i)
         param_block << " " * currentDepth + "textParam('#{name}', #{value}, #{description})"
@@ -232,6 +234,30 @@ class ParametersNodeHandler < Struct.new(:node)
   end
 end
 
+class DynamicParameterHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    puts " " * depth + "configure { project ->"
+
+    currentDepth = depth + indent
+    # Even though we are nested into properties already, we have to define it still.
+    # The configure {} block in job dsl feels to be buggy and this works.
+    puts " " * currentDepth + "project / 'properties' / 'hudson.model.ParametersDefinitionProperty' / 'parameterDefinitions' << '#{node.name}' {"
+    node.elements.each do |i|
+      case i.name
+      when '__uuid', '__localBaseDirectory', '__remoteBaseDirectory'
+        # nothing, dynamically created by the plugin.
+      when '__remote', 'readonlyInputField'
+        puts " " * (currentDepth + indent) + "'#{i.name}'(#{i.text})" unless i.text.empty?
+      else
+        puts " " * (currentDepth + indent) + "'#{i.name}'('''#{i.text}''')" unless i.text.empty?
+      end
+    end
+    puts " " * currentDepth + "}"
+
+    puts " " * depth + "}"
+  end
+end
+
 class PropertiesNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     # hack... need to print parameter block outside of property block. :(
@@ -250,8 +276,15 @@ class PropertiesNodeHandler < Struct.new(:node)
         i.elements.each do |p|
           case p.name
           when 'parameterDefinitions'
+
+            # These are not supported in jobdsl so have to be configured inside of properties
+            p.elements.each do |pelement|
+              if pelement.name == 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition'
+                DynamicParameterHandler.new(pelement).process(job_name, currentDepth, indent)
+              end
+            end
+
             # hack... should really be nested under properties {} but jobdsl doesnt support this yet
-            # parameter_node_block = ParametersNodeHandler.new(p).process(job_name, currentDepth, indent)
             parameter_node_block = ParametersNodeHandler.new(p).process(job_name, depth, indent)
           else
             pp p
