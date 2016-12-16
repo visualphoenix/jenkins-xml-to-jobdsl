@@ -600,6 +600,8 @@ class IrcPublisherNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "irc {"
     currentDepth = depth + indent
+    # configureBlock + GlobalConfigureBlock have to be used here because jobdsl
+    # does not support nesting configure within irc.
     configureBlock = []
     node.elements.each do |i|
       case i.name
