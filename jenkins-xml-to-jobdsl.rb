@@ -484,6 +484,7 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
+    GlobalConfigureBlock.print
     puts "}"
   end
 end
@@ -602,6 +603,8 @@ class IrcPublisherNodeHandler < Struct.new(:node)
     configureBlock = []
     node.elements.each do |i|
       case i.name
+      when 'buildToChatNotifier'
+        # dynamically created by IRC plugin
       when 'targets'
         IrcTargetsNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'strategy'
@@ -615,23 +618,17 @@ class IrcPublisherNodeHandler < Struct.new(:node)
       when 'notifyCulprits'
         puts " " * currentDepth + "notifyScmCulprits(#{i.text})"
       when 'notifyOnBuildStart'
-        configureBlock << "#{i.name}(#{i.text})"
-      when 'buildToChatNotifier'
-        attrs = i.attributes
-        configureBlock << "#{i.name}(class: '#{attrs['class'].text}', plugin: '#{attrs['plugin'].text}')"
+        configureBlock << "'#{i.name}'(#{i.text})"
       when 'matrixMultiplier'
-        configureBlock << "#{i.name}('#{i.text}')"
+        configureBlock << "'#{i.name}'('#{i.text}')"
       else
         pp i
       end
     end
 
     unless configureBlock.empty?
-      puts " " * currentDepth + "configure { node ->"
-      configureBlock.each do |e|
-        puts " " * (currentDepth + depth) + e
-      end
-      puts " " * currentDepth + "}"
+      configureBlock.unshift "node / publishers / 'hudson.plugins.ircbot.IrcPublisher' <<"
+      GlobalConfigureBlock.add configureBlock
     end
 
     puts " " * depth + "}"
@@ -937,6 +934,7 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
+    GlobalConfigureBlock.print
     puts "}"
   end
 end
@@ -989,8 +987,53 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
+    GlobalConfigureBlock.print
     puts "}"
   end
+end
+
+# If you want to have top level configure {} block elements use this like:
+#
+# configureBlock = [
+#   "node / 'path' / 'node'",
+#   "'thing'('toSet')",
+# ]
+#
+# GlobalConfigureBlock.add configureBlock
+# GlobalConfigureBlock.print
+#
+# which will yield the following groovy:
+#
+#     configure { node ->
+#         node / 'path' / 'node' {
+#             'thing'('toSet')
+#         }
+#     }
+class GlobalConfigureBlock
+  NOT_SO_CONSTANT_CONFIGURE_BLOCKS = []
+
+  def self.add arr
+    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.push(arr).flatten!
+  end
+
+  def self.print
+    return if NOT_SO_CONSTANT_CONFIGURE_BLOCKS.empty?
+    format 'configure { node ->'
+    first = NOT_SO_CONSTANT_CONFIGURE_BLOCKS.shift
+
+    format "#{first} {", 2
+    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.each do |e|
+      format e, 3
+    end
+
+    format '}', 2
+    format '}'
+  end
+
+  def self.format str, timesToIndent=1
+    puts ' ' * INDENT * timesToIndent + str
+  end
+
 end
 
 depth = 0
@@ -1007,6 +1050,9 @@ OptionParser.new do |opts|
     indent = indentation_level.to_i || 4
   end
 end.parse!
+
+# TODO clean up indent and printing in general to possibly printing util
+INDENT = indent
 
 f = ARGV.shift
 if !File.file?(f)
