@@ -1013,20 +1013,22 @@ class GlobalConfigureBlock
   NOT_SO_CONSTANT_CONFIGURE_BLOCKS = []
 
   def self.add arr
-    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.push(arr).flatten!
+    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.push Array(arr)
   end
 
   def self.print
     return if NOT_SO_CONSTANT_CONFIGURE_BLOCKS.empty?
     format 'configure { node ->'
-    first = NOT_SO_CONSTANT_CONFIGURE_BLOCKS.shift
+    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.each do |configureBlock|
+      first = configureBlock.shift
 
-    format "#{first} {", 2
-    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.each do |e|
-      format e, 3
+      format "#{first} {", 2
+      configureBlock.each do |e|
+        format e, 3
+      end
+
+      format '}', 2
     end
-
-    format '}', 2
     format '}'
   end
 
