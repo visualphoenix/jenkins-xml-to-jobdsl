@@ -665,6 +665,8 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
             pp e
           end
         end
+      when 'failureCount'
+        #unsupported
       else
         pp k
       end
@@ -694,12 +696,36 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "triggers {"
         i.elements.each do |j|
           case j.name
+          when 'hudson.plugins.emailext.plugins.trigger.FixedTrigger'
+            puts " " * (currentDepth + indent) + "fixed {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
+          when 'hudson.plugins.emailext.plugins.trigger.FirstFailureTrigger'
+            puts " " * (currentDepth + indent) + "firstFailure {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
           when 'hudson.plugins.emailext.plugins.trigger.FailureTrigger'
             puts " " * (currentDepth + indent) + "failure {"
             print_trigger_block(j, currentDepth, indent)
             puts " " * (currentDepth + indent) + "}"
           when 'hudson.plugins.emailext.plugins.trigger.SuccessTrigger'
             puts " " * (currentDepth + indent) + "success {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
+          when 'hudson.plugins.emailext.plugins.trigger.AlwaysTrigger'
+            puts " " * (currentDepth + indent) + "always {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
+          when 'hudson.plugins.emailext.plugins.trigger.StillFailingTrigger'
+            puts " " * (currentDepth + indent) + "stillFailing {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
+          when 'hudson.plugins.emailext.plugins.trigger.StatusChangedTrigger'
+            puts " " * (currentDepth + indent) + "statusChanged {"
+            print_trigger_block(j, currentDepth, indent)
+            puts " " * (currentDepth + indent) + "}"
+          when 'hudson.plugins.emailext.plugins.trigger.UnstableTrigger'
+            puts " " * (currentDepth + indent) + "unstable {"
             print_trigger_block(j, currentDepth, indent)
             puts " " * (currentDepth + indent) + "}"
           else
