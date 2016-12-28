@@ -767,6 +767,8 @@ class PublishersNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "configure { publishers ->"
         PerformancePublisherNodeHandler.new(i).process(job_name, currentDepth+indent, indent)
         puts " " * currentDepth + "}"
+      when 'hudson.plugins.sitemonitor.SiteMonitorRecorder'
+        SiteMonitorRecorderHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
@@ -775,6 +777,21 @@ class PublishersNodeHandler < Struct.new(:node)
   end
 end
 
+class SiteMonitorRecorderHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    node.elements.each do |i|
+      case i.name
+      when 'mSites'
+        i.elements.each do |mSite|
+          configureBlock = []
+          configureBlock << "node / publishers / '#{node.name}' / 'mSites' << 'hudson.plugins.sitemonitor.model.Site'"
+          configureBlock << "'mUrl'('#{mSite.at('//mUrl').text}')"
+          GlobalConfigureBlock.add configureBlock
+        end
+      end
+    end
+  end
+end
 
 class PerformancePublisherNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
