@@ -933,6 +933,12 @@ class BuildersNodeHandler < Struct.new(:node)
         txt = txt&.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
         puts " " * (currentDepth + indent) + "shell('''\\\n#{txt}\n''')"
         puts " " * currentDepth + "}"
+      when 'org.jvnet.hudson.plugins.SSHBuilder'
+        puts " " * currentDepth + "steps {"
+        puts " " * (currentDepth + depth) + "remoteShell('#{i.at_xpath("//#{i.name}/siteName")&.text}') {"
+        puts " " * (currentDepth + depth + depth) + "command('''#{i.at_xpath("//#{i.name}/command")&.text}''')"
+        puts " " * (currentDepth + depth) + "}"
+        puts " " * currentDepth + "}"
       else
         pp i
       end
