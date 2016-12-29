@@ -484,7 +484,7 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
-    GlobalConfigureBlock.print
+    ConfigureBlock.print
     puts "}"
   end
 end
@@ -600,9 +600,9 @@ class IrcPublisherNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "irc {"
     currentDepth = depth + indent
-    # configureBlock + GlobalConfigureBlock have to be used here because jobdsl
-    # does not support nesting configure within irc.
-    configureBlock = []
+    # ConfigureBlock has to be used here because jobdsl does not support
+    # nesting configure within irc.
+    configureBlock = ConfigureBlock.new [], indent: indent
     node.elements.each do |i|
       case i.name
       when 'buildToChatNotifier'
@@ -620,17 +620,17 @@ class IrcPublisherNodeHandler < Struct.new(:node)
       when 'notifyCulprits'
         puts " " * currentDepth + "notifyScmCulprits(#{i.text})"
       when 'notifyOnBuildStart'
-        configureBlock << "'#{i.name}'(#{i.text})"
+        configureBlock << "(ircNode / '#{i.name}').setValue(#{i.text})"
       when 'matrixMultiplier'
-        configureBlock << "'#{i.name}'('#{i.text}')"
+        configureBlock << "(ircNode / '#{i.name}').setValue('#{i.text}')"
       else
         pp i
       end
     end
 
     unless configureBlock.empty?
-      configureBlock.unshift "node / publishers / 'hudson.plugins.ircbot.IrcPublisher' <<"
-      GlobalConfigureBlock.add configureBlock
+      configureBlock.unshift "def ircNode = it / publishers / 'hudson.plugins.ircbot.IrcPublisher'"
+      configureBlock.save!
     end
 
     puts " " * depth + "}"
@@ -779,17 +779,40 @@ end
 
 class SiteMonitorRecorderHandler < Struct.new(:node)
   def process(job_name, depth, indent)
+    configureBlock = ConfigureBlock.new [], indent: indent
     node.elements.each do |i|
       case i.name
       when 'mSites'
+        configureBlock << "def mSitesNode = it / publishers / '#{node.name}' / 'mSites'"
         i.elements.each do |mSite|
-          configureBlock = []
-          configureBlock << "node / publishers / '#{node.name}' / 'mSites' << 'hudson.plugins.sitemonitor.model.Site'"
-          configureBlock << "'mUrl'('#{mSite.at('//mUrl').text}')"
-          GlobalConfigureBlock.add configureBlock
+          innerNode = []
+          mSite.elements.each do |s|
+            case s.name
+            when 'mUrl'
+              innerNode << "'#{s.name}'('#{s.text}')"
+            when 'timeout'
+              innerNode << "'#{s.name}'(#{s.text})"
+            when 'successResponseCodes'
+              srcsInnerNode = []
+              s.elements.each do |sInner|
+                case sInner.name
+                when 'int'
+                  srcsInnerNode << "'#{sInner.name}'(#{sInner.text})"
+                else
+                  pp sInner
+                end
+              end
+              innerNode << { "'#{s.name}'" => srcsInnerNode }
+            end
+          end
+
+          unless innerNode.empty?
+            configureBlock << { "mSitesNode << '#{mSite.name}'" => innerNode }
+          end
         end
       end
     end
+    configureBlock.save!
   end
 end
 
@@ -979,7 +1002,7 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
-    GlobalConfigureBlock.print
+    ConfigureBlock.print
     puts "}"
   end
 end
@@ -1032,53 +1055,112 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
         pp i
       end
     end
-    GlobalConfigureBlock.print
+    ConfigureBlock.print
     puts "}"
   end
 end
 
-# If you want to have top level configure {} block elements use this like:
+# Used to implement JobDSL's `configure {...}` type syntax. This class
+# approaches this problem as if the configure block is an array of lines and
+# each line can be either String, Hash, or Array. This is implemented this
+# way due to the way that JobDSL's configure block works and its flexibility.
 #
-# configureBlock = [
-#   "node / 'path' / 'node'",
-#   "'thing'('toSet')",
-# ]
+# See their docs for details on this:
+# https://github.com/jenkinsci/job-dsl-plugin/wiki/The-Configure-Block
 #
-# GlobalConfigureBlock.add configureBlock
-# GlobalConfigureBlock.print
+# This can be used like:
 #
-# which will yield the following groovy:
+#   configureBlock = ConfigureBlock.new [], indent: 4
+#   configureBlock << '// this would be the very first line within the configure block'
+#   configureBlock << 'it / "this is the groovy reserved `it` to indicate the node we are on'
+#   configureBlock << {'it / "can use a hash as well to describe inner blocks" <<' => ["'inner'('element')]}
 #
-#     configure { node ->
-#         node / 'path' / 'node' {
-#             'thing'('toSet')
-#         }
+#   configureBlock.save! #this will write `self` into the class constant that #print can use
+#   ConfigureBlock.print #this will print all ConfigureBlock's that have been #save!'d
+#
+# Another way to do this is like:
+#
+#   arr = [
+#     "def foo = it / 'inner' / 'xml'",
+#     "(foo / 'bar').setValue('bazz')",
+#     {
+#       "it / 'using' / 'block' <<" => [
+#         "'inner'('element')",
+#         "'another'('element')",
+#       ]
+#     },
+#     {
+#       "it / 'another' / 'using' / 'block'" => [
+#         {"'further'" => ["'nested'('element')"]},
+#       ]
 #     }
-class GlobalConfigureBlock
+#   ]
+#
+#   configureBlock = ConfigureBlock.new arr, indent: 4
+#   configureBlock.save!
+#   ConfigureBlock.print
+#
+# You can also define multiple configure blocks just by instantiating a new one
+# and calling #save! on that object.
+class ConfigureBlock
   NOT_SO_CONSTANT_CONFIGURE_BLOCKS = []
-
-  def self.add arr
-    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.push Array(arr)
-  end
 
   def self.print
     return if NOT_SO_CONSTANT_CONFIGURE_BLOCKS.empty?
-    format 'configure { node ->'
     NOT_SO_CONSTANT_CONFIGURE_BLOCKS.each do |configureBlock|
-      first = configureBlock.shift
-
-      format "#{first} {", 2
-      configureBlock.each do |e|
-        format e, 3
-      end
-
-      format '}', 2
+      puts configureBlock
     end
-    format '}'
   end
 
-  def self.format str, timesToIndent=1
-    puts ' ' * INDENT * timesToIndent + str
+  def initialize arr = [], opts = {}
+    @lines = arr
+    @indent = opts[:indent] || 4
+  end
+
+  def << e
+    @lines << e
+  end
+
+  def unshift e
+    @lines.unshift e
+  end
+
+  def empty?
+    @lines.empty?
+  end
+
+  def save!
+    NOT_SO_CONSTANT_CONFIGURE_BLOCKS.push self
+  end
+
+  def to_s
+    first = format 'configure {'
+    middle = @lines.inject('') do |ret, line|
+      ret = format line, 2
+      ret
+    end
+    last = format '}'
+    "#{first}#{middle}#{last}"
+  end
+
+  def format line, indent_times = 1
+    case line
+    when String
+      indention line, indent_times
+    when Hash
+      first = line.keys.first + ' {'
+      indention first, indent_times
+      format line.values.first, indent_times + 1
+      indention '}', indent_times
+    when Array
+      line.each do |l|
+        format l, indent_times
+      end
+    end
+  end
+
+  def indention line, indent_times = 1
+    puts ' ' * @indent * indent_times + "#{line}\n"
   end
 
 end
@@ -1097,9 +1179,6 @@ OptionParser.new do |opts|
     indent = indentation_level.to_i || 4
   end
 end.parse!
-
-# TODO clean up indent and printing in general to possibly printing util
-INDENT = indent
 
 f = ARGV.shift
 if !File.file?(f)
