@@ -764,9 +764,7 @@ class PublishersNodeHandler < Struct.new(:node)
         threshold = "'#{i.at_xpath('//hudson.tasks.BuildTrigger/threshold/name')&.text}'"
         puts " " * currentDepth + "downstream(#{projects}, #{threshold})"
       when 'hudson.plugins.performance.PerformancePublisher'
-        puts " " * currentDepth + "configure { publishers ->"
         PerformancePublisherNodeHandler.new(i).process(job_name, currentDepth+indent, indent)
-        puts " " * currentDepth + "}"
       when 'hudson.plugins.sitemonitor.SiteMonitorRecorder'
         SiteMonitorRecorderHandler.new(i).process(job_name, currentDepth, indent)
       else
@@ -818,20 +816,43 @@ end
 
 class PerformancePublisherNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
-    puts " " * depth + "publishers << 'hudson.plugins.performance.PerformancePublisher' {"
-    currentDepth = depth + indent
+    innerNode = []
+
     node.elements.each do |i|
       case i.name
       when 'errorFailedThreshold', 'errorUnstableThreshold', 'relativeFailedThresholdPositive',
            'relativeFailedThresholdNegative', 'relativeUnstableThresholdPositive', 'relativeUnstableThresholdNegative',
            'nthBuildNumber', 'configType', 'modeOfThreshold', 'compareBuildPrevious', 'modePerformancePerTestCase',
-           'errorUnstableResponseTimeThreshold', 'modeRelativeThresholds'
-        puts " " * currentDepth + "#{i.name} '#{i.text}'"
+           'errorUnstableResponseTimeThreshold', 'modeRelativeThresholds', 'failBuildIfNoResultFile', 'modeThroughput',
+           'modeEvaluation', 'ignoreFailedBuilds', 'ignoreUnstableBuilds', 'persistConstraintLog'
+        innerNode << "#{i.name} '#{i.text}'"
+      when 'parsers'
+        innerParsers = []
+        i.elements.each do |inner|
+          case inner.name
+          when 'hudson.plugins.performance.JMeterParser'
+            innerParsers << {
+              "'#{inner.name}'" => inner.elements.collect do |ie|
+                                     "'#{ie.name}'('#{ie.text}')"
+                                   end
+            }
+          else
+            pp i
+          end
+        end
+        innerNode << {"'parsers'" => innerParsers}
       else
         pp i
       end
     end
-    puts " " * depth + "}"
+
+    unless innerNode.empty?
+      ConfigureBlock.new([{
+          "it / publishers / '#{node.name}' <<" => innerNode
+        }],
+        indent: indent
+      ).save!
+    end
   end
 end
 
