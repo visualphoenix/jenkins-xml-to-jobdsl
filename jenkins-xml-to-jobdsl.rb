@@ -292,6 +292,15 @@ class PropertiesNodeHandler < Struct.new(:node)
         end
       when 'jenkins.model.BuildDiscarderProperty'
         BuildDiscarderNodeHandler.new(i).process(job_name, currentDepth, indent)
+      when 'com.cloudbees.plugins.JobPrerequisites'
+        ConfigureBlock.new([{
+            "it / properties / '#{i.name}'" => [
+              "'script'('''#{i.at_xpath("//#{i.name}/script")&.text}''')",
+              "'interpreter'('#{i.at_xpath("//#{i.name}/interpreter")&.text}')"
+            ]
+          }],
+          indent: indent
+        ).save!
       else
         pp i
       end
