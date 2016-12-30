@@ -794,6 +794,23 @@ class ExtendedEmailNodeHandler < Struct.new(:node)
   end
 end
 
+class TapPublisherHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    innerNode = []
+    node.elements.each do |i|
+      innerNode << "'#{i.name}'('#{i.text}')" unless i.text.empty?
+    end
+
+    unless innerNode.empty?
+      ConfigureBlock.new([{
+          "it / 'publishers' / '#{node.name}'" => innerNode
+        }],
+        indent: indent
+      ).save!
+    end
+  end
+end
+
 class PublishersNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "publishers {"
@@ -820,6 +837,8 @@ class PublishersNodeHandler < Struct.new(:node)
         PerformancePublisherNodeHandler.new(i).process(job_name, currentDepth+indent, indent)
       when 'hudson.plugins.sitemonitor.SiteMonitorRecorder'
         SiteMonitorRecorderHandler.new(i).process(job_name, currentDepth, indent)
+      when 'org.tap4j.plugin.TapPublisher'
+        TapPublisherHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
