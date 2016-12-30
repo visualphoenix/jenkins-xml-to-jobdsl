@@ -211,7 +211,8 @@ class ParametersNodeHandler < Struct.new(:node)
     currentDepth = depth + indent
     node.elements.each do |i|
       case i.name
-      when 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition'
+      when 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition',
+           'hudson.plugins.jira.versionparameter.JiraVersionParameterDefinition'
         # these cannot be defined in this scope. Have to be defined on /properties.
       when 'hudson.model.TextParameterDefinition'
         name, value, description = nvd(i)
@@ -231,6 +232,38 @@ class ParametersNodeHandler < Struct.new(:node)
     end
     param_block << " " * depth + "}"
     return param_block
+  end
+end
+
+class JiraVersionParameterDefinitionHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    innerNode = []
+    node.elements.each do |i|
+      case i.name
+      when 'pattern'
+        innerNode << {
+          "'#{i.name}'" => i.elements.collect{|e| %W['#{e.name}'('#{Helper.escape e.text}')]}
+        }
+      else
+        innerNode << "'#{i.name}'('#{i.text}')"
+      end
+    end
+
+    unless innerNode.empty?
+      ConfigureBlock.new([{
+          "it / #{configurePath} / '#{node.name}'" => innerNode
+        }],
+        indent: indent
+      ).save!
+    end
+  end
+
+  def configurePath
+    node
+      .path
+      .split('/')[2..4]
+      .collect{|n| "'#{n}'"}
+      .join ' / '
   end
 end
 
@@ -277,10 +310,13 @@ class PropertiesNodeHandler < Struct.new(:node)
           case p.name
           when 'parameterDefinitions'
 
-            # These are not supported in jobdsl so have to be configured inside of properties
+            # These are not supported in jobdsl so have to be configured via ConfigureBlock
             p.elements.each do |pelement|
-              if pelement.name == 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition'
+              case pelement.name
+              when 'com.seitenbau.jenkins.plugins.dynamicparameter.ChoiceParameterDefinition'
                 DynamicParameterHandler.new(pelement).process(job_name, currentDepth, indent)
+              when 'hudson.plugins.jira.versionparameter.JiraVersionParameterDefinition'
+                JiraVersionParameterDefinitionHandler.new(pelement).process(job_name, currentDepth, indent)
               end
             end
 
@@ -1197,6 +1233,16 @@ class ConfigureBlock
 
   def indention line, indent_times = 1
     puts ' ' * @indent * indent_times + "#{line}\n"
+  end
+
+end
+
+# Bucket to dump any helpers multiple classes may need.
+class Helper
+
+  # Escape Strings that are not valid groovy syntax.
+  def self.escape str
+    str.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
   end
 
 end
