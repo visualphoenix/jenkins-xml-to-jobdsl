@@ -811,6 +811,39 @@ class TapPublisherHandler < Struct.new(:node)
   end
 end
 
+class JUnitResultArchiverHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    innerNode = []
+
+    currentDepth = depth + indent
+
+    node.elements.each do |i|
+      case i.name
+      when 'testResults'
+        # Nothing, pulled out below because is in signature of archiveJunit method.
+      when 'keepLongStdio'
+        innerNode << ' ' * currentDepth + "retainLongStdout(#{i.text})" unless i.text.empty?
+      when 'testDataPublishers'
+        # TODO - don't have working example for this yet
+      when 'healthScaleFactor'
+        innerNode << ' ' * currentDepth + "#{i.name}(#{i.text})" unless i.text.empty?
+      else
+        pp i
+      end
+    end
+
+    testResults = node.at_xpath("//publishers/#{node.name}/testResults")&.text
+    archiveSig = ' ' * depth + "archiveJunit('#{testResults}')"
+    if innerNode.empty?
+      puts archiveSig
+    else
+      puts archiveSig + ' {'
+      puts innerNode
+      puts ' ' * depth + '}'
+    end
+  end
+end
+
 class PublishersNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "publishers {"
@@ -839,6 +872,8 @@ class PublishersNodeHandler < Struct.new(:node)
         SiteMonitorRecorderHandler.new(i).process(job_name, currentDepth, indent)
       when 'org.tap4j.plugin.TapPublisher'
         TapPublisherHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.tasks.junit.JUnitResultArchiver'
+        JUnitResultArchiverHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
