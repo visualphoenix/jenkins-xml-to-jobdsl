@@ -1187,6 +1187,7 @@ class ConfigureBlock
   def initialize arr = [], opts = {}
     @lines = arr
     @indent = opts[:indent] || 4
+    @indent_times = opts[:indent_times] || 1
   end
 
   def << e
@@ -1208,14 +1209,14 @@ class ConfigureBlock
   def to_s
     first = format 'configure {'
     middle = @lines.inject('') do |ret, line|
-      ret = format line, 2
+      ret = format line, @indent_times + 1
       ret
     end
     last = format '}'
     "#{first}#{middle}#{last}"
   end
 
-  def format line, indent_times = 1
+  def format line, indent_times = @indent_times
     case line
     when String
       indention line, indent_times
