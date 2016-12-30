@@ -650,8 +650,8 @@ class IrcPublisherNodeHandler < Struct.new(:node)
     configureBlock = ConfigureBlock.new [], indent: indent
     node.elements.each do |i|
       case i.name
-      when 'buildToChatNotifier'
-        # dynamically created by IRC plugin
+      when 'buildToChatNotifier', 'channels'
+        # dynamically created by IRC plugin, or cruft
       when 'targets'
         IrcTargetsNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'strategy'
