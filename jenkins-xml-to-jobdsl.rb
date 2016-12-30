@@ -844,6 +844,18 @@ class JUnitResultArchiverHandler < Struct.new(:node)
   end
 end
 
+class MailerHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    recipients = node.at_xpath("//#{node.name}/recipients")&.text
+    dontNotifyEveryUnstableBuild = node.at_xpath("//#{node.name}/dontNotifyEveryUnstableBuild")&.text
+    sendToIndividuals = node.at_xpath("//#{node.name}/sendToIndividuals")&.text
+
+    unless recipients.empty? || dontNotifyEveryUnstableBuild.empty? || sendToIndividuals.empty?
+      puts " " * depth + "mailer('#{recipients}', #{dontNotifyEveryUnstableBuild}, #{sendToIndividuals})"
+    end
+  end
+end
+
 class PublishersNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     puts " " * depth + "publishers {"
@@ -874,6 +886,8 @@ class PublishersNodeHandler < Struct.new(:node)
         TapPublisherHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.tasks.junit.JUnitResultArchiver'
         JUnitResultArchiverHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.tasks.Mailer'
+        MailerHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
