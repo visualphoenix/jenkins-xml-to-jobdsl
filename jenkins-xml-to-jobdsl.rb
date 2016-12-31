@@ -888,12 +888,76 @@ class PublishersNodeHandler < Struct.new(:node)
         JUnitResultArchiverHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.tasks.Mailer'
         MailerHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.plugins.rubyMetrics.rcov.RcovPublisher'
+        RcovPublisherHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
     end
     puts " " * depth + "}"
   end
+end
+
+class RcovPublisherHandler < Struct.new(:node)
+
+  def process(job_name, depth, indent)
+    puts " " * depth + "rcov {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'reportDir'
+        puts " " * currentDepth + "reportDirectory('#{i.text}')"
+      when 'targets'
+        handleTargets i, currentDepth
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+
+  def handleTargets(i, depth)
+    i.elements.each do |target|
+      case target.name
+      when 'hudson.plugins.rubyMetrics.rcov.model.MetricTarget'
+        handleMetricTarget target, depth
+      else
+        pp target
+      end
+    end
+  end
+
+  def handleMetricTarget(i, depth)
+    meth = ''
+    signature = []
+
+    i.elements.each do |target|
+      case target.name
+      when 'metric'
+        case target.text
+        when 'TOTAL_COVERAGE'
+          meth = 'totalCoverage'
+        when 'CODE_COVERAGE'
+          meth = 'codeCoverage'
+        else
+          pp target
+        end
+      when 'healthy'
+        signature[0] = target.text || 0
+      when 'unhealthy'
+        signature[1] = target.text || 0
+      when 'unstable'
+        signature[2] = target.text || 0
+      else
+        pp target
+      end
+    end
+
+    unless meth.empty? && signature.empty?
+      puts ' ' * depth + "#{meth}(#{signature.join ', '})"
+    end
+  end
+
 end
 
 class SiteMonitorRecorderHandler < Struct.new(:node)
