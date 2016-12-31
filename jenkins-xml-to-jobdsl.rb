@@ -1145,9 +1145,56 @@ class BuildersNodeHandler < Struct.new(:node)
         puts " " * (currentDepth + depth + depth) + "command('''#{i.at_xpath("//#{i.name}/command")&.text}''')"
         puts " " * (currentDepth + depth) + "}"
         puts " " * currentDepth + "}"
+      when 'hudson.tasks.Maven'
+        puts " " * currentDepth + "steps {"
+        MavenBuilderHandler.new(i).process(job_name, currentDepth + indent, indent)
+        puts " " * currentDepth + "}"
       else
         pp i
       end
+    end
+  end
+end
+
+class MavenBuilderHandler < Struct.new(:node)
+  def process(job_name, depth, indent)
+    innerNode = []
+    currentDepth = depth + indent
+    configureBlock = ConfigureBlock.new [], indent: indent, indent_times: (currentDepth / indent rescue 1)
+
+    node.elements.each do |i|
+      case i.name
+      when 'properties'
+        i.text.split("\n").each do |property|
+          key, value = *property.split('=')
+          innerNode << ' ' * currentDepth + "property('#{key}', '#{value}')"
+        end
+      when 'usePrivateRepository'
+        configureBlock << "'#{i.name}'(#{i.text})" unless i.text.empty?
+      when 'testDataPublishers'
+        # TODO - don't have working example for this yet
+      when 'settings'
+        next if i.text.empty?
+        path = i.at_xpath("//builders/#{node.name}/#{i.name}/path")&.text
+        configureBlock << {"it / '#{i.name}'(class: '#{i[:class]}')" => ["'path'('#{path}')"]}
+      when 'globalSettings'
+        next if i.text.empty?
+        path = i.at_xpath("//builders/#{node.name}/#{i.name}/path")&.text
+        configureBlock << {"it / '#{i.name}'(class: 'jenkins.mvn.FilePathGlobalSettingsProvider')" => ["'path'('#{path}')"]}
+      when 'targets'
+        innerNode << ' ' * currentDepth + "goals('#{i.text}')" unless i.text.empty?
+      when 'pom'
+        innerNode << ' ' * currentDepth + "rootPOM('#{i.text}')" unless i.text.empty?
+      else
+        pp i
+      end
+    end
+
+    unless innerNode.empty?
+      puts ' ' * depth + "maven {"
+      puts innerNode
+      puts configureBlock unless configureBlock.empty?
+      puts ' ' * depth + '}'
     end
   end
 end
