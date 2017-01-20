@@ -226,6 +226,18 @@ class ParametersNodeHandler < Struct.new(:node)
       when 'hudson.model.ChoiceParameterDefinition'
         name, value, description = nvd(i)
         param_block << " " * currentDepth + "choiceParam('#{name}', #{value}, #{description})"
+      when 'hudson.model.PasswordParameterDefinition'
+        name, value, description = nvd(i)
+        param_block << ""
+        param_block << " " * currentDepth + "/* Found a Password Parameter of:"
+        param_block << ""
+        param_block << " " * currentDepth + "       Name: #{name}"
+        param_block << " " * currentDepth + "       Value: #{value}"
+        param_block << " " * currentDepth + "       description: #{description}"
+        param_block << ""
+        param_block << " " * currentDepth + "   These are no longer supported and you will need to configure something like:"
+        param_block << " " * currentDepth + "   https://support.cloudbees.com/hc/en-us/articles/203802500-Injecting-Secrets-into-Jenkins-Build-Jobs */"
+        param_block << ""
       else
         param_block << "#{pp i}"
       end
@@ -317,6 +329,8 @@ class PropertiesNodeHandler < Struct.new(:node)
                 DynamicParameterHandler.new(pelement).process(job_name, currentDepth, indent)
               when 'hudson.plugins.jira.versionparameter.JiraVersionParameterDefinition'
                 JiraVersionParameterDefinitionHandler.new(pelement).process(job_name, currentDepth, indent)
+              when 'hudson.model.PasswordParameterDefinition'
+                # handled by ParametersNodeHandler
               end
             end
 
