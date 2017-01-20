@@ -890,12 +890,43 @@ class PublishersNodeHandler < Struct.new(:node)
         MailerHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.plugins.rubyMetrics.rcov.RcovPublisher'
         RcovPublisherHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.plugins.testng.Publisher'
+        TestNgHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
     end
     puts " " * depth + "}"
   end
+end
+
+class TestNgHandler < Struct.new(:node)
+
+  def process(job_name, depth, indent)
+    reportFilenamePattern = node.at_xpath("//#{node.name}/reportFilenamePattern")&.text
+    puts " " * depth + "archiveTestNG('#{reportFilenamePattern}') {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'reportFilenamePattern'
+        # handled above
+      when 'escapeTestDescp'
+        puts " " * currentDepth + "escapeTestDescription(#{i.text})"
+      when 'escapeExceptionMsg'
+        puts " " * currentDepth + "escapeExceptionMessages(#{i.text})"
+      when 'showFailedBuilds'
+        puts " " * currentDepth + "showFailedBuildsInTrendGraph(#{i.text})"
+      when 'unstableOnSkippedTests'
+        puts " " * currentDepth + "markBuildAsUnstableOnSkippedTests(#{i.text})"
+      when 'failureOnFailedTestConfig'
+        puts " " * currentDepth + "markBuildAsFailureOnFailedConfiguration(#{i.text})"
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+
 end
 
 class RcovPublisherHandler < Struct.new(:node)
