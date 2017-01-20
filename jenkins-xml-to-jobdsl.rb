@@ -1185,6 +1185,8 @@ class MavenBuilderHandler < Struct.new(:node)
         innerNode << ' ' * currentDepth + "goals('#{i.text}')" unless i.text.empty?
       when 'pom'
         innerNode << ' ' * currentDepth + "rootPOM('#{i.text}')" unless i.text.empty?
+      when 'mavenName'
+        innerNode << ' ' * currentDepth + "mavenInstallation('#{i.text}')" unless i.text.empty?
       else
         pp i
       end
