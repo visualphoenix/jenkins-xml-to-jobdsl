@@ -2,6 +2,34 @@ require 'nokogiri'
 require 'pp'
 require 'optparse'
 
+# Bucket to dump any helpers multiple classes may need.
+module Helper
+
+  # Escape Strings that are not valid groovy syntax.
+  def escape str
+    str.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
+  end
+
+  def formatText str
+    if str =~ /false|true/
+      truthy str
+    else
+      "'#{str}'"
+    end
+  end
+
+  def truthy str
+    str == 'true'
+  end
+
+  def toGroovyListOfStrings str
+    str.split.map do |s|
+      "'#{s}'"
+    end.join ', '
+  end
+
+end
+
 class SvnScmLocationNodeHandler < Struct.new(:node)
   def process(job_name, depth, indent)
     currentDepth = depth + indent
@@ -248,13 +276,15 @@ class ParametersNodeHandler < Struct.new(:node)
 end
 
 class JiraVersionParameterDefinitionHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
     innerNode = []
     node.elements.each do |i|
       case i.name
       when 'pattern'
         innerNode << {
-          "'#{i.name}'" => i.elements.collect{|e| %W['#{e.name}'('#{Helper.escape e.text}')]}
+          "'#{i.name}'" => i.elements.collect{|e| %W['#{e.name}'('#{escape e.text}')]}
         }
       else
         innerNode << "'#{i.name}'('#{i.text}')"
@@ -640,6 +670,8 @@ class SonarNodeHandler < Struct.new(:node)
 end
 
 class IrcTargetsNodeHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
     node.elements.each do |i|
       case i.name
@@ -654,13 +686,6 @@ class IrcTargetsNodeHandler < Struct.new(:node)
     end
   end
 
-  def formatText(str)
-    if str =~ /false|true/
-      str == 'true'
-    else
-      "'#{str}'"
-    end
-  end
 end
 
 class IrcPublisherNodeHandler < Struct.new(:node)
@@ -1194,11 +1219,56 @@ class BuildersNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "steps {"
         MavenBuilderHandler.new(i).process(job_name, currentDepth + indent, indent)
         puts " " * currentDepth + "}"
+      when 'hudson.plugins.copyartifact.CopyArtifact'
+        puts " " * currentDepth + "steps {"
+        CopyArtifactHandler.new(i).process(job_name, currentDepth + indent, indent)
+        puts " " * currentDepth + "}"
       else
         pp i
       end
     end
   end
+end
+
+class CopyArtifactHandler < Struct.new(:node)
+  include Helper
+
+  def process(job_name, depth, indent)
+    upstreamProject = node.at_xpath("//#{node.name}/project")&.text
+    puts " " * depth + "copyArtifacts('#{upstreamProject}') {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'doNotFingerprintArtifacts'
+        puts " " * currentDepth + "fingerprintArtifacts(#{! truthy i.text})" unless i.text.empty?
+      when 'excludes'
+        puts " " * currentDepth + "excludePatterns(#{toGroovyListOfStrings i.text})" unless i.text.empty?
+      when 'target'
+        puts " " * currentDepth + "targetDirectory(#{formatText i.text})" unless i.text.empty?
+      when 'selector'
+        buildSelector i, currentDepth, indent
+      when 'filter'
+        puts " " * currentDepth + "includePatterns(#{toGroovyListOfStrings i.text})" unless i.text.empty?
+      when 'project'
+        # handled above
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+
+  def buildSelector currentNode, depth, indent
+    puts " " * depth + "buildSelector {"
+    currentDepth = depth + indent
+    case currentNode.attribute('class').value
+    when 'hudson.plugins.copyartifact.StatusBuildSelector'
+      stable = currentNode.at_xpath("//#{currentNode.name}/stable")&.text
+      puts " " * currentDepth + "latestSuccessful(#{truthy stable})"
+    end
+    puts " " * depth + "}"
+  end
+
 end
 
 class MavenBuilderHandler < Struct.new(:node)
@@ -1472,16 +1542,6 @@ class ConfigureBlock
 
 end
 
-# Bucket to dump any helpers multiple classes may need.
-class Helper
-
-  # Escape Strings that are not valid groovy syntax.
-  def self.escape str
-    str.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
-  end
-
-end
-
 depth = 0
 indent = 4
 
@@ -1514,7 +1574,7 @@ Nokogiri::XML::Reader(File.open(f)).each do |node|
     MavenDefinitionNodeHandler.new(
       Nokogiri::XML(node.outer_xml).at('./maven2-moduleset')
     ).process(job, depth, indent)
-  elsif node.name == 'project' && node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT
+  elsif node.name == 'project' && node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT && node.depth == 0
     FreestyleDefinitionNodeHandler.new(
       Nokogiri::XML(node.outer_xml).at('./project')
     ).process(job, depth, indent)
