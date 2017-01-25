@@ -381,6 +381,8 @@ class PropertiesNodeHandler < Struct.new(:node)
           }],
           indent: indent
         ).save!
+      when 'hudson.plugins.copyartifact.CopyArtifactPermissionProperty'
+        CopyArtifactPermissionPropertyHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
@@ -391,6 +393,34 @@ class PropertiesNodeHandler < Struct.new(:node)
         puts "#{i}"
       end
     end
+  end
+end
+
+class CopyArtifactPermissionPropertyHandler < Struct.new(:node)
+  include Helper
+
+  def process(job_name, depth, indent)
+    innerNode = []
+
+    node.elements.each do |i|
+      case i.name
+      when 'projectNameList'
+        unless i.text.empty?
+          nestedInnerNode = i.elements.map do |e|
+                              "'#{e.name}'(#{formatText e.text})" unless e.text.empty?
+                            end
+          innerNode << { "'#{i.name}'" => nestedInnerNode }
+        end
+      else
+        pp i
+      end
+    end
+
+    ConfigureBlock.new([
+      {
+        "it / 'properties' / '#{node.name}'" => innerNode
+      }
+    ], indent: indent).save!
   end
 end
 
