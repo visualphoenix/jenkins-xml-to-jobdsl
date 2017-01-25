@@ -1223,11 +1223,58 @@ class BuildersNodeHandler < Struct.new(:node)
         puts " " * currentDepth + "steps {"
         CopyArtifactHandler.new(i).process(job_name, currentDepth + indent, indent)
         puts " " * currentDepth + "}"
+      when 'hudson.tasks.Ant'
+        puts " " * currentDepth + "steps {"
+        AntHandler.new(i).process(job_name, currentDepth + indent, indent)
+        puts " " * currentDepth + "}"
       else
         pp i
       end
     end
   end
+end
+
+class AntHandler < Struct.new(:node)
+  include Helper
+
+  def process(job_name, depth, indent)
+    puts " " * depth + "ant {"
+    currentDepth = depth + indent
+    node.elements.each do |i|
+      case i.name
+      when 'targets'
+        puts " " * currentDepth + "#{i.name}([#{toGroovyListOfStrings i.text}])" unless i.text.empty?
+      when 'antName'
+        puts " " * currentDepth + "antInstallation(#{formatText i.text})" unless i.text.empty?
+      when 'buildFile'
+        puts " " * currentDepth + "#{i.name}(#{formatText i.text})" unless i.text.empty?
+      when 'properties'
+        puts " " * currentDepth + "props(#{propertiesToMap i.text})" unless i.text.empty?
+      when 'antOpts'
+        puts " " * currentDepth + "javaOpts([#{toGroovyListOfStrings i.text}])" unless i.text.empty?
+      else
+        pp i
+      end
+    end
+    puts " " * depth + "}"
+  end
+
+  # Example input:
+  #   <properties>this=${thing}
+  #   another=${one}
+  #   duplicate=${one}
+  #   duplicate=${one}</properties>
+  def propertiesToMap propertyNode
+    propertyNode
+      .split("\n")
+      .map{|prop| prop.split '='}
+      .inject({}){|hash, arr| hash[arr[0]] = arr[1] ; hash}
+      .to_a
+      .map{|propKV| "'#{propKV[0]}': '#{escape propKV[1]}'"}
+      .flatten
+      .join ', '
+  end
+
 end
 
 class CopyArtifactHandler < Struct.new(:node)
