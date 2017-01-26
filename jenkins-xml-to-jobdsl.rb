@@ -961,11 +961,31 @@ class PublishersNodeHandler < Struct.new(:node)
         RcovPublisherHandler.new(i).process(job_name, currentDepth, indent)
       when 'hudson.plugins.testng.Publisher'
         TestNgHandler.new(i).process(job_name, currentDepth, indent)
+      when 'com.pocketsoap.ChatterNotifier'
+        ChatterNotifierHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
     end
     puts " " * depth + "}"
+  end
+end
+
+class ChatterNotifierHandler < Struct.new(:node)
+  include Helper
+
+  def process(job_name, depth, indent)
+    innerNode = []
+
+    node.elements.each do |i|
+      innerNode << "'#{i.name}'(#{formatText i.text})" unless i.text.empty?
+    end
+
+    ConfigureBlock.new([
+      {
+        "it / 'publishers' / '#{node.name}'" => innerNode
+      }
+    ], indent: indent).save!
   end
 end
 
