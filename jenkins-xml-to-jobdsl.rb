@@ -1434,7 +1434,7 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         TriggerDefinitionNodeHandler.new(i).process(job_name, currentDepth, indent)
       when 'authToken'
         puts " " * currentDepth + "authenticationToken(token = '#{i.text}')"
-      when 'mavenOpts'
+      when 'mavenOpts', 'rootPOM', 'customWorkspace'
         puts " " * currentDepth + "#{i.name}('#{i.text}')"
       when 'keepDependencies', 'concurrentBuild', 'disabled', 'fingerprintingDisabled',
            'runHeadless', 'resolveDependencies', 'siteArchivingDisabled', 'archivingDisabled',
