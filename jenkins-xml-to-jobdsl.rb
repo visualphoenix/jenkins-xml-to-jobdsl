@@ -28,6 +28,22 @@ module Helper
     end.join ', '
   end
 
+  # Example input:
+  #   <properties>this=${thing}
+  #   another=${one}
+  #   duplicate=${one}
+  #   duplicate=${one}</properties>
+  def propertiesToMap propertyNode
+    propertyNode
+      .split("\n")
+      .map{|prop| prop.split '='}
+      .inject({}){|hash, arr| hash[arr[0]] = arr[1] ; hash}
+      .to_a
+      .map{|propKV| "'#{propKV[0]}': '#{escape propKV[1]}'"}
+      .flatten
+      .join ', '
+  end
+
 end
 
 class SvnScmLocationNodeHandler < Struct.new(:node)
@@ -963,6 +979,8 @@ class PublishersNodeHandler < Struct.new(:node)
         TestNgHandler.new(i).process(job_name, currentDepth, indent)
       when 'com.pocketsoap.ChatterNotifier'
         ChatterNotifierHandler.new(i).process(job_name, currentDepth, indent)
+      when 'hudson.plugins.parameterizedtrigger.BuildTrigger'
+        TriggerNodeHandler.new(i).process(job_name, currentDepth, indent)
       else
         pp i
       end
@@ -1206,10 +1224,14 @@ class BlockNodeHandler < Struct.new(:node)
 end
 
 class TriggerNodeHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
+    puts " " * depth + "downstreamParameterized {"
     projects = node.at_xpath('//configs/*/projects')&.text.split(',').map{|s|"'#{s}'"}.join(',')
-    puts " " * depth + "trigger([#{projects}]) {"
-    currentDepth = depth + indent
+    nestedDepth = depth + indent
+    puts " " * nestedDepth + "trigger([#{projects}]) {"
+    currentDepth = nestedDepth + indent
     node.elements.each do |i|
       case i.name
       when 'configs'
@@ -1230,6 +1252,35 @@ class TriggerNodeHandler < Struct.new(:node)
                 pp k
               end
             end
+          when 'hudson.plugins.parameterizedtrigger.BuildTriggerConfig'
+            j.elements.each do |k|
+              case k.name
+              when 'projects'
+                # handled at beginning of method
+              when 'configs'
+                k.elements.each do |l|
+                  case l.name
+                  when 'hudson.plugins.parameterizedtrigger.PredefinedBuildParameters'
+                    l.elements.each do |m|
+                      case m.name
+                      when 'properties'
+                        puts " " * currentDepth + "predefinedProps(#{propertiesToMap m.text})" unless i.text.empty?
+                      else
+                        pp m
+                      end
+                    end
+                  else
+                    pp l
+                  end
+                end
+              when 'condition'
+                puts " " * currentDepth + "#{k.name}('#{k.text}')"
+              when 'triggerWithNoParameters'
+                puts " " * currentDepth + "#{k.name}(#{truthy k.text})"
+              else
+                pp k
+              end
+            end
           else
             pp j.name
           end
@@ -1238,6 +1289,7 @@ class TriggerNodeHandler < Struct.new(:node)
         pp i
       end
     end
+    puts " " * nestedDepth + "}"
     puts " " * depth + "}"
   end
 end
@@ -1249,9 +1301,7 @@ class BuildersNodeHandler < Struct.new(:node)
       case i.name
       when 'hudson.plugins.parameterizedtrigger.TriggerBuilder'
         puts " " * currentDepth + "steps {"
-        puts " " * (currentDepth + indent) + "downstreamParameterized {"
-        TriggerNodeHandler.new(i).process(job_name, currentDepth + indent * 2, indent)
-        puts " " * (currentDepth + indent) + "}"
+        TriggerNodeHandler.new(i).process(job_name, currentDepth, indent)
         puts " " * currentDepth + "}"
       when 'hudson.tasks.Shell'
         puts " " * currentDepth + "steps {"
@@ -1307,22 +1357,6 @@ class AntHandler < Struct.new(:node)
       end
     end
     puts " " * depth + "}"
-  end
-
-  # Example input:
-  #   <properties>this=${thing}
-  #   another=${one}
-  #   duplicate=${one}
-  #   duplicate=${one}</properties>
-  def propertiesToMap propertyNode
-    propertyNode
-      .split("\n")
-      .map{|prop| prop.split '='}
-      .inject({}){|hash, arr| hash[arr[0]] = arr[1] ; hash}
-      .to_a
-      .map{|propKV| "'#{propKV[0]}': '#{escape propKV[1]}'"}
-      .flatten
-      .join ', '
   end
 
 end
