@@ -10,6 +10,10 @@ module Helper
     str.gsub(/\\/,"\\\\\\").gsub("'''", %q(\\\'\\\'\\\'))
   end
 
+  def removeCarriage str
+    str.tr "", "\n"
+  end
+
   def formatText str
     if str =~ /false|true/
       truthy str
@@ -39,7 +43,7 @@ module Helper
       .map{|prop| prop.split '='}
       .inject({}){|hash, arr| hash[arr[0]] = arr[1] ; hash}
       .to_a
-      .map{|propKV| "'#{propKV[0]}': '#{escape propKV[1]}'"}
+      .map{|propKV| "'#{propKV[0]}':'''#{escape propKV[1]}'''"}
       .flatten
       .join ', '
   end
@@ -229,10 +233,7 @@ class ParametersNodeHandler < Struct.new(:node)
             case k.name
             when 'a'
               if k.attribute('class').value == 'string-array'
-                k.elements.each do |s|
-                  value += "'#{s.text}',"
-                end
-                value.chomp!(',')
+                value += k.elements.map{|s| "'#{s.text}'"}.join ', '
               end
             else
               pp k
@@ -599,6 +600,8 @@ class TriggerDefinitionNodeHandler < Struct.new(:node)
 end
 
 class FlowDefinitionNodeHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
     puts "pipelineJob('#{job_name}') {"
     currentDepth = depth + indent
@@ -607,7 +610,7 @@ class FlowDefinitionNodeHandler < Struct.new(:node)
       when 'actions'
       when 'description'
         if !(i.text.nil? || i.text.empty?)
-          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+          puts " " * currentDepth + "#{i.name}('''\\\n#{removeCarriage i.text}\n''')"
         end
       when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
@@ -723,7 +726,7 @@ class IrcTargetsNodeHandler < Struct.new(:node)
       case i.name
       when 'hudson.plugins.im.GroupChatIMMessageTarget'
         params = i.elements.collect {|e|
-          "#{e.name}: #{formatText e.text}"
+          "#{e.name}:#{formatText e.text}"
         }.join ', '
         puts " " * depth + "channel(#{params})"
       else
@@ -1448,6 +1451,8 @@ class MavenBuilderHandler < Struct.new(:node)
 end
 
 class MavenDefinitionNodeHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
     puts "mavenJob('#{job_name}') {"
     currentDepth = depth + indent
@@ -1458,7 +1463,7 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
         # todo: not yet implemented
       when 'description'
         if !(i.text.nil? || i.text.empty?)
-          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+          puts " " * currentDepth + "#{i.name}('''\\\n#{removeCarriage i.text}\n''')"
         end
       when 'properties'
         PropertiesNodeHandler.new(i).process(job_name, currentDepth, indent)
@@ -1515,6 +1520,8 @@ class MavenDefinitionNodeHandler < Struct.new(:node)
 end
 
 class FreestyleDefinitionNodeHandler < Struct.new(:node)
+  include Helper
+
   def process(job_name, depth, indent)
     puts "freeStyleJob('#{job_name}') {"
     currentDepth = depth + indent
@@ -1524,7 +1531,7 @@ class FreestyleDefinitionNodeHandler < Struct.new(:node)
         # todo: not yet implemented
       when 'description'
         if !(i.text.nil? || i.text.empty?)
-          puts " " * currentDepth + "#{i.name}('''\\\n#{i.text}\n''')"
+          puts " " * currentDepth + "#{i.name}('''\\\n#{removeCarriage i.text}\n''')"
         end
       when 'keepDependencies', 'quietPeriod'
         puts " " * currentDepth + "#{i.name}(#{i.text})"
