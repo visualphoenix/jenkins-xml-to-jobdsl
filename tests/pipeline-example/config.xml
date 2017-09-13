@@ -1,26 +1,82 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job@2.3">
+<flow-definition plugin="workflow-job@2.11.2">
+  <actions/>
   <description></description>
   <keepDependencies>false</keepDependencies>
-  <properties/>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@2.9">
-    <scm class="hudson.plugins.git.GitSCM" plugin="git@2.5.2">
-      <configVersion>2</configVersion>
-      <userRemoteConfigs>
-        <hudson.plugins.git.UserRemoteConfig>
-          <url>https://github.com/kitconcept/jenkins-pipeline-examples.git</url>
-        </hudson.plugins.git.UserRemoteConfig>
-      </userRemoteConfigs>
-      <branches>
-        <hudson.plugins.git.BranchSpec>
-          <name>*/master</name>
-        </hudson.plugins.git.BranchSpec>
-      </branches>
-      <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
-      <submoduleCfg class="list"/>
-      <extensions/>
-    </scm>
-    <scriptPath>Jenkinsfile</scriptPath>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <org.jenkinsci.plugins.ghprb.GhprbTrigger plugin="ghprb@1.39.0">
+          <spec>H/5 * * * *</spec>
+          <configVersion>3</configVersion>
+          <adminlist></adminlist>
+          <allowMembersOfWhitelistedOrgsAsAdmin>false</allowMembersOfWhitelistedOrgsAsAdmin>
+          <orgslist></orgslist>
+          <cron>H/5 * * * *</cron>
+          <buildDescTemplate></buildDescTemplate>
+          <onlyTriggerPhrase>false</onlyTriggerPhrase>
+          <useGitHubHooks>false</useGitHubHooks>
+          <permitAll>false</permitAll>
+          <whitelist></whitelist>
+          <autoCloseFailedPullRequests>false</autoCloseFailedPullRequests>
+          <displayBuildErrorsOnDownstreamBuilds>false</displayBuildErrorsOnDownstreamBuilds>
+          <whiteListTargetBranches>
+            <org.jenkinsci.plugins.ghprb.GhprbBranch>
+              <branch></branch>
+            </org.jenkinsci.plugins.ghprb.GhprbBranch>
+          </whiteListTargetBranches>
+          <blackListTargetBranches>
+            <org.jenkinsci.plugins.ghprb.GhprbBranch>
+              <branch></branch>
+            </org.jenkinsci.plugins.ghprb.GhprbBranch>
+          </blackListTargetBranches>
+          <gitHubAuthId>3789877c-3eaa-4cce-8183-df16e9443bb1</gitHubAuthId>
+          <triggerPhrase></triggerPhrase>
+          <skipBuildPhrase>.*\[skip\W+ci\].*</skipBuildPhrase>
+          <blackListCommitAuthor></blackListCommitAuthor>
+          <blackListLabels></blackListLabels>
+          <whiteListLabels></whiteListLabels>
+          <includedRegions></includedRegions>
+          <excludedRegions></excludedRegions>
+          <extensions>
+            <org.jenkinsci.plugins.ghprb.extensions.status.GhprbSimpleStatus>
+              <commitStatusContext></commitStatusContext>
+              <triggeredStatus></triggeredStatus>
+              <startedStatus></startedStatus>
+              <statusUrl></statusUrl>
+              <addTestResults>false</addTestResults>
+            </org.jenkinsci.plugins.ghprb.extensions.status.GhprbSimpleStatus>
+          </extensions>
+        </org.jenkinsci.plugins.ghprb.GhprbTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.39">
+    <script>node {
+      def mvnHome
+      stage(&apos;Preparation&apos;) { // for display purposes
+      // Get some code from a GitHub repository
+      git &apos;https://github.com/jglick/simple-maven-project-with-tests.git&apos;
+      // Get the Maven tool.
+      // ** NOTE: This &apos;M3&apos; Maven tool must be configured
+      // **       in the global configuration.
+
+      }
+      stage(&apos;Build&apos;) {
+      // Run the maven build
+      if (isUnix()) {
+      sh &quot;&apos;mvn&apos; -Dmaven.test.failure.ignore clean package&quot;
+      } else {
+      bat(/&quot;mvn&quot; -Dmaven.test.failure.ignore clean package/)
+      }
+      }
+      stage(&apos;Results&apos;) {
+      junit &apos;**/target/surefire-reports/TEST-*.xml&apos;
+      archive &apos;target/*.jar&apos;
+      }
+      }</script>
+    <sandbox>true</sandbox>
   </definition>
   <triggers/>
+  <disabled>false</disabled>
 </flow-definition>
