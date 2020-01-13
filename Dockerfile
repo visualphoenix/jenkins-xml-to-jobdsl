@@ -20,9 +20,21 @@ RUN true \
 
 RUN true \
  && apt-get update \
- && apt-get install -qy --no-install-recommends openjdk-8-jdk openjdk-8-jre gradle \
+ && apt-get install -qy --no-install-recommends openjdk-8-jdk openjdk-8-jre \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* 
+
+RUN true \
+ && apt-get update \
+ && apt-get install -qy --no-install-recommends curl\
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
+ 
+RUN curl -sL https://services.gradle.org/distributions/gradle-4.6-bin.zip -o gradle-4.6.zip \
+ && unzip -d /usr/share gradle-4.6.zip \
+ && ln -s /usr/share/gradle-4.6/bin/gradle /usr/bin/gradle \
+ && gradle --version \
+ && rm gradle-4.6.zip
 
 RUN true \
  && apt-get update \
