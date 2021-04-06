@@ -19,7 +19,7 @@ Inside the container, run:
 
 Start the container:
 
-    docker run -d --name jdsl -p 3000:3000 jdsl
+    docker run -d --rm --name jdsl -p 3000:3000 jdsl
 
 Upload a job for translation:
 
