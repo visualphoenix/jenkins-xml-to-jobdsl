@@ -22,19 +22,19 @@ RUN true \
  && apt-get update \
  && apt-get install -qy --no-install-recommends openjdk-8-jdk openjdk-8-jre \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/* 
+ && rm -rf /var/lib/apt/lists/*
 
 RUN true \
  && apt-get update \
  && apt-get install -qy --no-install-recommends curl\
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
- 
-RUN curl -sL https://services.gradle.org/distributions/gradle-4.6-bin.zip -o gradle-4.6.zip \
- && unzip -d /usr/share gradle-4.6.zip \
- && ln -s /usr/share/gradle-4.6/bin/gradle /usr/bin/gradle \
+
+RUN curl -sL https://services.gradle.org/distributions/gradle-5.6.4-bin.zip -o gradle-5.6.4.zip \
+ && unzip -d /usr/share gradle-5.6.4.zip \
+ && ln -s /usr/share/gradle-5.6.4/bin/gradle /usr/bin/gradle \
  && gradle --version \
- && rm gradle-4.6.zip
+ && rm gradle-5.6.4.zip
 
 RUN true \
  && apt-get update \
@@ -46,7 +46,7 @@ RUN true \
 RUN true \
  && git clone https://github.com/jenkinsci/job-dsl-plugin.git /jdsl \
  && cd /jdsl \
- && gradle :job-dsl-core:oneJar
+ && gradle oneJar
 
 ENV DSL_JAR "/jdsl/job-dsl-core/build/libs/job-dsl-core-*-standalone.jar"
 
