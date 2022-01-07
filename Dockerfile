@@ -30,11 +30,11 @@ RUN true \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sL https://services.gradle.org/distributions/gradle-5.6.4-bin.zip -o gradle-5.6.4.zip \
- && unzip -d /usr/share gradle-5.6.4.zip \
- && ln -s /usr/share/gradle-5.6.4/bin/gradle /usr/bin/gradle \
+RUN curl -sL https://services.gradle.org/distributions/gradle-6.9.2-bin.zip -o gradle-6.9.2.zip \
+ && unzip -d /usr/share gradle-6.9.2.zip \
+ && ln -s /usr/share/gradle-6.9.2/bin/gradle /usr/bin/gradle \
  && gradle --version \
- && rm gradle-5.6.4.zip
+ && rm gradle-6.9.2.zip
 
 RUN true \
  && apt-get update \
